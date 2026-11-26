@@ -1,0 +1,33 @@
+diff --git a/kernel/manager/apk_sign.c b/kernel/manager/apk_sign.c
+index edec5bb..26c7c8e 100644
+--- a/kernel/manager/apk_sign.c
++++ b/kernel/manager/apk_sign.c
+@@ -328,7 +328,27 @@ int get_pkg_from_apk_dir_path(char *pkg, const char *path)
+ 	return 0;
+ }
+ 
++// 管理器签名校验已禁用：不再解析 APK 的 v2 签名块、不再比对证书哈希。
++// 现在只按包名判定（path 形如 /data/app/XXXX/<pkg>-YYY/base.apk）。
++// check_v2_signature 及其辅助函数保留在下方，需要时可改回调用。
+ bool is_manager_apk(char *path)
+ {
+-	return check_v2_signature(path, EXPECTED_MANAGER_SIZE, EXPECTED_MANAGER_HASH);
++#ifndef KSU_MANAGER_PACKAGE
++#define KSU_MANAGER_PACKAGE "com.sukisu.nova"
++#endif
++	char dir[KSU_MAX_PACKAGE_NAME + 16];
++	char pkg[KSU_MAX_PACKAGE_NAME];
++	char *last_slash;
++
++	strscpy(dir, path, sizeof(dir));
++	last_slash = strrchr(dir, '/');
++	if (last_slash)
++		*last_slash = '\0'; // strip /base.apk
++
++	if (get_pkg_from_apk_dir_path(pkg, dir) < 0) {
++		pr_err("failed to parse package name from %s\n", dir);
++		return false;
++	}
++
++	return strcmp(pkg, KSU_MANAGER_PACKAGE) == 0;
+ }

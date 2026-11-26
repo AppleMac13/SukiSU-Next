@@ -1,0 +1,21 @@
+SukiSU-Next 是 SukiSU 前端与 KernelSU-Next 的嫁接产物，目标是在不损失功能与可用性的前提下，替代 KernelSU-Next
+
+- 复用 SukiSU 前端页面，兼容全部 SukiSU 主题；
+- 底层后端基于 KernelSU-Next ，兼容全部 KernelSU-Next 模块
+- 内核模块沿用KernelSU-Next模块，请前往https://https://github.com/KernelSU-Next/KernelSU-Next/releases自行获取
+
+许可说明：
+- KernelSU-Next：GPL‑2.0
+- SukiSU 前端代码：按上游许可保持GPL-3.0
+- 内置可选图标：
+  - KernelSU 图标、SukiSU 图标、SukiSU 线稿图标：版权归属各自原作者，本项目仅作为可选素材提供，并不提倡使用，未取得商用/二次分发授权，使用该类图标请自行承担版权相关责任
+  - 其余图标：为本项目自制素材
+
+上游项目:
+KernelSU-Next: https://https://github.com/KernelSU-Next/KernelSU-Next
+SukiSU: https://github.com/SukiSU-Nova/SukiSU-Nova
+本项目GitHub地址： https://github.com/AppleMac13/SukiSU-Next
+
+**注意：**
+本项目为非官方移植项目，与 KernelSU-Next 团队、D-R-99、SukiSU 团队、ShirkNeko 无任何关联。
+后端 KernelSU-Next 版本：3.4.2

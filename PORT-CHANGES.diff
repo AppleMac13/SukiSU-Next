@@ -1,0 +1,991 @@
+diff --git a/manager/app/build.gradle.kts b/manager/app/build.gradle.kts
+index de36f1c..4c5789f 100644
+--- a/manager/app/build.gradle.kts
++++ b/manager/app/build.gradle.kts
+@@ -466,4 +466,7 @@ android.sourceSets.getByName("main").apply {
+     // Native libraries are extracted to an executable location by Android.
+     jniLibs.directories.add(kpmToolsDir.get().dir("jniLibs").asFile.toString())
+ }
+-tasks.named("preBuild").configure { dependsOn(downloadKpmTools) }
++// KPM is disabled in this port (KernelSU-Next has no KernelPatch support), so the
++// prebuilt KPM tool download is no longer wired into preBuild. Keep the task
++// around for anyone re-enabling it, but builds must not depend on that mirror.
++// tasks.named("preBuild").configure { dependsOn(downloadKpmTools) }
+diff --git a/manager/app/src/main/cpp/CMakeLists.txt b/manager/app/src/main/cpp/CMakeLists.txt
+index 622b622..9617b3f 100644
+--- a/manager/app/src/main/cpp/CMakeLists.txt
++++ b/manager/app/src/main/cpp/CMakeLists.txt
+@@ -16,7 +16,9 @@ add_library(kernelsu
+         ksu.cc
+         )
+ 
+-target_include_directories(kernelsu PRIVATE . ${CMAKE_CURRENT_SOURCE_DIR}/../../../../..)
++# uapi/*.h are committed as real files (not symlinks) so the tree also builds on
++# Windows checkouts, where git symlinks are not materialised.
++target_include_directories(kernelsu PRIVATE .)
+ 
+ find_library(log-lib log)
+ 
+diff --git a/manager/app/src/main/cpp/jni.cc b/manager/app/src/main/cpp/jni.cc
+index d11350d..56520f4 100644
+--- a/manager/app/src/main/cpp/jni.cc
++++ b/manager/app/src/main/cpp/jni.cc
+@@ -113,7 +113,7 @@ static uint64_t capListToBits(JNIEnv *env, jobject list) {
+         auto integer = env->CallObjectMethod(list, get, i);
+         int data = env->CallIntMethod(integer, intValue);
+ 
+-        if (cap_valid(data)) {
++        if (data >= 0 && data <= CAP_LAST_CAP) {
+             result |= (1ULL << data);
+         }
+     }
+@@ -201,7 +201,7 @@ Java_com_sukisu_nova_Natives_getAppProfile(JNIEnv *env, jobject, jstring pkg, ji
+         env->SetBooleanField(obj, rootUseDefaultField, (jboolean) profile.rp_config.use_default);
+         if (strlen(profile.rp_config.template_name) > 0) {
+             env->SetObjectField(obj, rootTemplateField,
+-                    env->NewStringUTF(profile.rp_config.template_name));
++                                env->NewStringUTF(profile.rp_config.template_name));
+         }
+ 
+         env->SetIntField(obj, uidField, profile.rp_config.profile.uid);
+@@ -223,13 +223,13 @@ Java_com_sukisu_nova_Natives_getAppProfile(JNIEnv *env, jobject, jstring pkg, ji
+         }
+ 
+         env->SetObjectField(obj, domainField,
+-                env->NewStringUTF(profile.rp_config.profile.selinux_domain));
++                            env->NewStringUTF(profile.rp_config.profile.selinux_domain));
+         env->SetIntField(obj, namespacesField, profile.rp_config.profile.namespaces);
+         env->SetBooleanField(obj, allowSuField, profile.allow_su);
+         env->SetLongField(obj, flagsField, (jlong) profile.rp_config.profile.flags);
+     } else {
+         env->SetBooleanField(obj, nonRootUseDefaultField,
+-                (jboolean) profile.nrp_config.use_default);
++                             (jboolean) profile.nrp_config.use_default);
+         env->SetBooleanField(obj, umountModulesField, profile.nrp_config.profile.umount_modules);
+     }
+ 
+@@ -325,16 +325,19 @@ Java_com_sukisu_nova_Natives_setAppProfile(JNIEnv *env, jobject clazz, jobject p
+ 
+     return set_app_profile(&p);
+ }
++
+ extern "C"
+ JNIEXPORT jboolean JNICALL
+ Java_com_sukisu_nova_Natives_uidShouldUmount(JNIEnv *env, jobject thiz, jint uid) {
+     return uid_should_umount(uid);
+ }
++
+ extern "C"
+ JNIEXPORT jboolean JNICALL
+ Java_com_sukisu_nova_Natives_isSuEnabled(JNIEnv *env, jobject thiz) {
+     return is_su_enabled();
+ }
++
+ extern "C"
+ JNIEXPORT jboolean JNICALL
+ Java_com_sukisu_nova_Natives_setSuEnabled(JNIEnv *env, jobject thiz, jboolean enabled) {
+@@ -386,7 +389,7 @@ Java_com_sukisu_nova_Natives_isAvcSpoofEnabled(JNIEnv *env, jobject thiz) {
+ extern "C"
+ JNIEXPORT jboolean JNICALL
+ Java_com_sukisu_nova_Natives_setAvcSpoofEnabled(JNIEnv *env, jobject thiz, jboolean enabled) {
+-    return set_avc_spoof_enabled(enabled) == 0;
++    return set_avc_spoof_enabled(enabled);
+ }
+ 
+ extern "C"
+@@ -399,7 +402,33 @@ Java_com_sukisu_nova_Natives_getUserName(JNIEnv *env, jobject thiz, jint uid) {
+     return nullptr;
+ }
+ 
+-int fork_dont_care_and_exec_ksud(const char *path, const char *pkg) {
++// SukiSU's GET_FULL_VERSION ioctl is emulated from the Next kernel's version tag.
++extern "C"
++JNIEXPORT jstring JNICALL
++Java_com_sukisu_nova_Natives_getFullVersion(JNIEnv *env, jobject) {
++    char buff[255] = {};
++    if (get_full_version(buff, sizeof(buff))) {
++        return env->NewStringUTF(buff);
++    }
++    return nullptr;
++}
++
++// SukiSU's HOOK_TYPE ioctl is emulated from the Next kernel's GET_HOOK_MODE.
++extern "C"
++JNIEXPORT jstring JNICALL
++Java_com_sukisu_nova_Natives_getHookType(JNIEnv *env, jobject) {
++    char hook_type[32] = {};
++    if (get_hook_type(hook_type, sizeof(hook_type))) {
++        return env->NewStringUTF(hook_type);
++    }
++    // Natives declares this non-null, so never hand back null.
++    return env->NewStringUTF("Unknown");
++}
++
++// Magica bootstrap: kept for manifest compatibility (android:zygotePreloadName).
++// KernelSU-Next's ksud has no `late-load --magica` mode, so the exec fails
++// gracefully on this backend.
++static int fork_dont_care_and_exec_ksud(const char *path, const char *pkg) {
+     int pid = fork();
+     if (pid < 0) {
+         PLOGE("fork");
+@@ -437,7 +466,8 @@ int fork_dont_care_and_exec_ksud(const char *path, const char *pkg) {
+ extern "C"
+ JNIEXPORT void JNICALL
+ Java_com_sukisu_nova_magica_AppZygotePreload_forkDontCareAndExecKsud(JNIEnv *env, jclass clazz,
+-                                                                        jstring ksud_path, jstring pkg_name) {
++                                                                    jstring ksud_path,
++                                                                    jstring pkg_name) {
+     auto path = env->GetStringUTFChars(ksud_path, nullptr);
+     auto pkg = env->GetStringUTFChars(pkg_name, nullptr);
+     LOGD("executing magica %s (pkg %s)", path, pkg);
+@@ -445,24 +475,3 @@ Java_com_sukisu_nova_magica_AppZygotePreload_forkDontCareAndExecKsud(JNIEnv *env
+     env->ReleaseStringUTFChars(ksud_path, path);
+     env->ReleaseStringUTFChars(pkg_name, pkg);
+ }
+-
+-// Custom
+-extern "C"
+-JNIEXPORT jstring JNICALL
+-Java_com_sukisu_nova_Natives_getFullVersion(JNIEnv *env, jobject) {
+-    char buff[255] = {};
+-    if (get_full_version(buff)) {
+-        return env->NewStringUTF(buff);
+-    }
+-    return nullptr;
+-}
+-
+-extern "C"
+-JNIEXPORT jstring JNICALL
+-Java_com_sukisu_nova_Natives_getHookType(JNIEnv *env, jobject) {
+-    char hook_type[32] = {};
+-    if (get_hook_type(hook_type)) {
+-        return env->NewStringUTF(hook_type);
+-    }
+-    return nullptr;
+-}
+diff --git a/manager/app/src/main/cpp/ksu.cc b/manager/app/src/main/cpp/ksu.cc
+index 312153d..05ea542 100644
+--- a/manager/app/src/main/cpp/ksu.cc
++++ b/manager/app/src/main/cpp/ksu.cc
+@@ -1,6 +1,8 @@
+ //
+ // Created by weishu on 2022/12/9.
+ //
++// SukiSU Nova frontend adapted to the KernelSU-Next kernel driver.
++//
+ 
+ #include <sys/prctl.h>
+ #include <cstdint>
+@@ -18,6 +20,12 @@
+ #include <cerrno>
+ #include "ksu.h"
+ 
++#ifndef LOG_TAG
++#define LOG_TAG "KernelSU-Next-SukiUI"
++#endif
++
++#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
++
+ static int fd = -1;
+ 
+ static inline int scan_driver_fd() {
+@@ -54,7 +62,7 @@ static inline int scan_driver_fd() {
+         base = base ? base + 1 : target;
+ 
+         if (strstr(base, kName)) {
+-            found = (int)fd_long;
++            found = (int) fd_long;
+             break;
+         }
+     }
+@@ -75,7 +83,7 @@ static int ksuctl(unsigned long op, Args &&... args) {
+     return ioctl(fd, op, std::forward<Args>(args)...);
+ }
+ 
+-static struct ksu_get_info_cmd g_version {};
++static struct ksu_get_info_cmd g_version{};
+ 
+ struct ksu_get_info_cmd get_info() {
+     if (!g_version.version) {
+@@ -222,6 +230,22 @@ bool is_kernel_umount_enabled() {
+     return value != 0;
+ }
+ 
++bool set_adb_root_enabled(bool enabled) {
++    return set_feature(KSU_FEATURE_ADB_ROOT, enabled ? 1 : 0);
++}
++
++bool is_adb_root_enabled() {
++    uint64_t value = 0;
++    bool supported = false;
++    if (!get_feature(KSU_FEATURE_ADB_ROOT, &value, &supported)) {
++        return false;
++    }
++    if (!supported) {
++        return false;
++    }
++    return value != 0;
++}
++
+ int set_selinux_hide_enabled(bool enabled) {
+     if (!set_feature(KSU_FEATURE_SELINUX_HIDE, enabled ? 1 : 0)) {
+         return -errno;
+@@ -241,17 +265,17 @@ bool is_selinux_hide_enabled() {
+     return value != 0;
+ }
+ 
+-int set_mount_hide_enabled(bool enabled) {
+-    if (!set_feature(KSU_FEATURE_MOUNT_HIDE, enabled ? 1 : 0)) {
+-        return -errno;
+-    }
+-    return 0;
++bool set_avc_spoof_enabled(bool enabled) {
++    struct ksu_set_feature_cmd cmd = {};
++    cmd.feature_id = KSU_FEATURE_AVC_SPOOF;
++    cmd.value = enabled ? 1 : 0;
++    return ksuctl(KSU_IOCTL_SET_FEATURE, &cmd) == 0;
+ }
+ 
+-bool is_mount_hide_enabled() {
++bool is_avc_spoof_enabled() {
+     uint64_t value = 0;
+     bool supported = false;
+-    if (!get_feature(KSU_FEATURE_MOUNT_HIDE, &value, &supported)) {
++    if (!get_feature(KSU_FEATURE_AVC_SPOOF, &value, &supported)) {
+         return false;
+     }
+     if (!supported) {
+@@ -260,101 +284,82 @@ bool is_mount_hide_enabled() {
+     return value != 0;
+ }
+ 
+-int set_avc_spoof_enabled(bool enabled) {
+-    return set_feature(KSU_FEATURE_AVC_SPOOF, enabled ? 1 : 0) ? 0 : -errno;
++// SukiSU's KSU_FEATURE_MOUNT_HIDE (16) has no counterpart in the KernelSU-Next
++// kernel; report the feature as absent and refuse the toggle.
++int set_mount_hide_enabled(bool enabled) {
++    (void) enabled;
++    return -EOPNOTSUPP;
+ }
+ 
+-bool is_avc_spoof_enabled() {
+-    uint64_t value = 0;
+-    bool supported = false;
+-    return get_feature(KSU_FEATURE_AVC_SPOOF, &value, &supported) && supported && value != 0;
+-}
+-
+-// Custom
+-DEFINE_CACHED_GETTER(full_version, KSU_IOCTL_GET_FULL_VERSION, ksu_get_full_version_cmd, version_full, 255)
+-DEFINE_CACHED_GETTER(hook_type, KSU_IOCTL_HOOK_TYPE, ksu_hook_type_cmd, hook_type, 32)
+-
+-static int ksu_extension_call(struct ksu_extension_cmd *cmd) {
+-    return ksuctl(KSU_IOCTL_EXTENSION, cmd);
+-}
+-
+-int ksu_set_spoof_cpu(const struct ksu_set_spoof_cpu_cmd *cmd) {
+-    if (!cmd) return -EINVAL;
+-    struct ksu_extension_cmd ec = {};
+-    ec.id = KSU_EXTENSION_CPU_SPOOF;
+-    ec.op = KSU_EXTENSION_IO;
+-    ec.user_ptr = (uint64_t)(uintptr_t)cmd;
+-    return ksu_extension_call(&ec);
+-}
+-
+-
+-int umount_paths_wipe() {
+-    struct ksu_extension_cmd cmd = {};
+-    cmd.id = KSU_EXTENSION_UMOUNT_PATHS;
+-    cmd.op = KSU_EXTENSION_WIPE;
+-    return ksu_extension_call(&cmd);
+-}
+-
+-int umount_paths_add(const char *path, uint32_t flags) {
+-    if (!path) return -EINVAL;
+-    struct ksu_extension_umount_cmd uc = {};
+-    uc.op = KSU_UMOUNT_IO_OP_ADD;
+-    uc.payload.add.mode = KSU_UMOUNT_ADD;
+-    uc.payload.add.flags = flags;
+-    uc.payload.add.arg = (uintptr_t)path;
+-
+-    struct ksu_extension_cmd cmd = {};
+-    cmd.id = KSU_EXTENSION_UMOUNT_PATHS;
+-    cmd.op = KSU_EXTENSION_IO;
+-    cmd.user_ptr = (uint64_t)(uintptr_t)&uc;
+-    return ksu_extension_call(&cmd);
+-}
+-
+-int umount_paths_delete(const char *path) {
+-    if (!path) return -EINVAL;
+-    struct ksu_extension_umount_cmd uc = {};
+-    uc.op = KSU_UMOUNT_IO_OP_DEL;
+-    uc.payload.add.mode = KSU_UMOUNT_DEL;
+-    uc.payload.add.flags = 0;
+-    uc.payload.add.arg = (uintptr_t)path;
+-
+-    struct ksu_extension_cmd cmd = {};
+-    cmd.id = KSU_EXTENSION_UMOUNT_PATHS;
+-    cmd.op = KSU_EXTENSION_IO;
+-    cmd.user_ptr = (uint64_t)(uintptr_t)&uc;
+-    return ksu_extension_call(&cmd);
+-}
+-
+-int umount_paths_list(char *buffer, uint32_t buf_size) {
+-    if (!buffer || buf_size == 0) return -EINVAL;
+-    struct ksu_extension_umount_cmd uc = {};
+-    uc.op = KSU_UMOUNT_IO_OP_LIST;
+-    uc.payload.list.buf_size = buf_size;
+-    uc.payload.list.arg = (uintptr_t)buffer;
+-
+-    struct ksu_extension_cmd cmd = {};
+-    cmd.id = KSU_EXTENSION_UMOUNT_PATHS;
+-    cmd.op = KSU_EXTENSION_IO;
+-    cmd.user_ptr = (uint64_t)(uintptr_t)&uc;
+-    return ksu_extension_call(&cmd);
+-}
+-
+-// ----- Dynamic manager -----
+-int dynamic_manager_get(struct ksu_manager_cmd *cmd) {
+-    if (!cmd) return -EINVAL;
+-    cmd->operation = KSU_MANAGER_GET;
+-    struct ksu_extension_cmd ec = {};
+-    ec.id = KSU_EXTENSION_DYNAMIC_MANAGER;
+-    ec.op = KSU_EXTENSION_IO;
+-    ec.user_ptr = (uint64_t)(uintptr_t)cmd;
+-    return ksu_extension_call(&ec);
+-}
+-
+-int dynamic_manager_set(struct ksu_manager_cmd *cmd) {
+-    if (!cmd) return -EINVAL;
+-    struct ksu_extension_cmd ec = {};
+-    ec.id = KSU_EXTENSION_DYNAMIC_MANAGER;
+-    ec.op = KSU_EXTENSION_IO;
+-    ec.user_ptr = (uint64_t)(uintptr_t)cmd;
+-    return ksu_extension_call(&ec);
++bool is_mount_hide_enabled() {
++    return false;
++}
++
++const char *get_hook_mode(void) {
++    static struct ksu_get_hook_mode_cmd cmd = {0};
++
++    if (ksuctl(KSU_IOCTL_GET_HOOK_MODE, &cmd) == 0)
++        return cmd.mode;
++
++    return "Unknown";
++}
++
++uid_t get_manager_appid(void) {
++    static struct ksu_get_manager_appid_cmd cmd = {0};
++
++    if (ksuctl(KSU_IOCTL_GET_MANAGER_APPID, &cmd) == 0)
++        return cmd.appid;
++
++    return 0;
++}
++
++const char *get_version_tag(void) {
++    static struct ksu_get_version_tag_cmd cmd = {0};
++
++    if (ksuctl(KSU_IOCTL_GET_VERSION_TAG, &cmd) == 0)
++        return cmd.tag;
++
++    return "Unknown";
++}
++
++bool get_full_version(char *buff, int size) {
++    if (!buff || size <= 0) {
++        return false;
++    }
++
++    static char cached[255] = {0};
++    static bool tried = false;
++
++    if (!tried) {
++        tried = true;
++        const char *tag = get_version_tag();
++        if (tag && tag[0] && strcmp(tag, "Unknown") != 0) {
++            snprintf(cached, sizeof(cached), "%s", tag);
++        }
++    }
++
++    if (cached[0] == '\0') {
++        return false;
++    }
++
++    snprintf(buff, (size_t) size, "%s", cached);
++    return true;
++}
++
++bool get_hook_type(char *buff, int size) {
++    if (!buff || size <= 0) {
++        return false;
++    }
++
++    const char *mode = get_hook_mode();
++    if (!mode || mode[0] == '\0') {
++        return false;
++    }
++
++    snprintf(buff, (size_t) size, "%s", mode);
++    return true;
++}
++
++bool is_zygisk_enabled() {
++    return !!getenv("ZYGISK_ENABLED");
+ }
+diff --git a/manager/app/src/main/cpp/ksu.h b/manager/app/src/main/cpp/ksu.h
+index f7543c2..ead7e26 100644
+--- a/manager/app/src/main/cpp/ksu.h
++++ b/manager/app/src/main/cpp/ksu.h
+@@ -1,6 +1,8 @@
+ //
+ // Created by weishu on 2022/12/9.
+ //
++// SukiSU Nova frontend adapted to the KernelSU-Next kernel driver.
++//
+ 
+ #ifndef KERNELSU_KSU_H
+ #define KERNELSU_KSU_H
+@@ -38,6 +40,21 @@ bool set_app_profile(const app_profile *profile);
+ 
+ int get_app_profile(app_profile *profile);
+ 
++// KernelSU-Next exposes GET_HOOK_MODE (ioctl 98) and GET_VERSION_TAG (ioctl 99).
++// SukiSU's GET_FULL_VERSION (100) / HOOK_TYPE (101) do not exist on this backend,
++// so the two helpers below derive the values the ported frontend expects.
++const char *get_hook_mode(void);
++
++const char *get_version_tag(void);
++
++bool get_full_version(char *buff, int size);
++
++bool get_hook_type(char *buff, int size);
++
++uid_t get_manager_appid(void);
++
++bool is_zygisk_enabled();
++
+ // Su compat
+ bool set_su_enabled(bool enabled);
+ 
+@@ -48,61 +65,36 @@ bool set_kernel_umount_enabled(bool enabled);
+ 
+ bool is_kernel_umount_enabled();
+ 
++// ADB root
++bool set_adb_root_enabled(bool enabled);
++
++bool is_adb_root_enabled();
++
+ // SELinux hide
+ int set_selinux_hide_enabled(bool enabled);
+ 
+ bool is_selinux_hide_enabled();
+ 
+-// Mount hide
+-int set_mount_hide_enabled(bool enabled);
+-
+-bool is_mount_hide_enabled();
++// Avc spoof
++bool set_avc_spoof_enabled(bool enabled);
+ 
+-// AVC log spoof
+-int set_avc_spoof_enabled(bool enabled);
+ bool is_avc_spoof_enabled();
+ 
+-// CPU spoof SET-MIDR io passthrough (kept struct layout from
+-// uapi/supercall.h::ksu_set_spoof_cpu_cmd).
+-int ksu_set_spoof_cpu(const struct ksu_set_spoof_cpu_cmd *cmd);
+-
+-// KSU_EXTENSION_UMOUNT_PATHS
+-int umount_paths_wipe();
+-int umount_paths_add(const char *path, uint32_t flags);
+-int umount_paths_delete(const char *path);
+-int umount_paths_list(char *buffer, uint32_t buf_size);
++// Mount hide: SukiSU fork-local feature (KSU_FEATURE_MOUNT_HIDE = 16) that the
++// KernelSU-Next kernel does not implement. Kept as no-ops so the ported UI can
++// call them unconditionally.
++int set_mount_hide_enabled(bool enabled);
+ 
+-// KSU_EXTENSION_DYNAMIC_MANAGER
+-int dynamic_manager_get(struct ksu_manager_cmd *cmd);
+-int dynamic_manager_set(struct ksu_manager_cmd *cmd);
++bool is_mount_hide_enabled();
+ 
+ bool get_allow_list(struct ksu_new_get_allow_list_cmd *);
+ 
+-bool get_full_version(char* buff);
+-bool get_hook_type(char *buff);
+-
+ inline std::pair<int, int> legacy_get_info() {
+     int32_t version = -1;
+     int32_t flags = 0;
+     int32_t result = 0;
+-    prctl(static_cast<int>(0xDEADBEEF), 2, &version, &flags, &result);
++    prctl(0xDEADBEEF, 2, &version, &flags, &result);
+     return {version, flags};
+ }
+ 
+-#define DEFINE_CACHED_GETTER(name, ioctl, cmd_type, field, size) \
+-    static char g_##name[size] = {0}; \
+-    bool get_##name(char *buff) { \
+-        if (g_##name[0] == '\0') { \
+-            struct cmd_type cmd = {0}; \
+-            if (ksuctl(ioctl, &cmd) == 0) { \
+-                snprintf(g_##name, sizeof(g_##name), "%s", cmd.field); \
+-            } \
+-        } \
+-        if (g_##name[0] != '\0') { \
+-            snprintf(buff, size, "%s", g_##name); \
+-            return true; \
+-        } \
+-        return false; \
+-    }
+-
+ #endif //KERNELSU_KSU_H
+diff --git a/manager/app/src/main/java/com/sukisu/nova/Natives.kt b/manager/app/src/main/java/com/sukisu/nova/Natives.kt
+index 8bc0ced..2c835b5 100644
+--- a/manager/app/src/main/java/com/sukisu/nova/Natives.kt
++++ b/manager/app/src/main/java/com/sukisu/nova/Natives.kt
+@@ -24,12 +24,12 @@ object Natives {
+     // 32336: new set_sepolicy ioctl
+     // 32377: add set_init_pgrp ioctl
+     // 32513: add uapi version
+-    const val MINIMAL_SUPPORTED_KERNEL = 32513
++    // 33070 / 33188: KernelSU-Next kernel UAPI (SET_SEPOLICY, uapi version)
++    const val MINIMAL_SUPPORTED_KERNEL = 33188
+ 
+-    // Get full version
+-    // The kernel returns null when the GET_FULL_VERSION supercall is unavailable.
++    // KernelSU-Next has no GET_FULL_VERSION ioctl; the JNI layer derives this value
++    // from the kernel's version tag (GET_VERSION_TAG, ioctl 99). Null = not reported.
+     external fun getFullVersion(): String?
+-    const val MINIMAL_SUPPORTED_KERNEL_FULL = "v3.0.0"
+ 
+     // 12040: Support disable sucompat mode
+     const val KERNEL_SU_DOMAIN = "u:r:ksu:s0"
+@@ -172,9 +172,9 @@ object Natives {
+     fun isPreviewMode(): Boolean = !isManager && rootAvailable()
+ 
+     fun isFullFeatured(): Boolean {
+-        val kernelFullVersion = getFullVersion()
+-        return (kernelFullVersion != null && isVersionLessThan(kernelFullVersion, MINIMAL_SUPPORTED_KERNEL_FULL)) ||
+-                isManager && kernelUAPIVersion == managerUAPIVersion && rootAvailable() ||
++        // KernelSU-Next exposes no full-version contract; UAPI equality is the only
++        // reliable "frontend and kernel agree" signal on this backend.
++        return isManager && kernelUAPIVersion == managerUAPIVersion && rootAvailable() ||
+                 isPreviewMode()
+     }
+ 
+diff --git a/manager/app/src/main/java/com/sukisu/nova/backend/BackendCapabilities.kt b/manager/app/src/main/java/com/sukisu/nova/backend/BackendCapabilities.kt
+new file mode 100644
+index 0000000..7ccd901
+--- /dev/null
++++ b/manager/app/src/main/java/com/sukisu/nova/backend/BackendCapabilities.kt
+@@ -0,0 +1,52 @@
++package com.sukisu.nova.backend
++
++/**
++ * Capability map of the kernel backend this manager build talks to.
++ *
++ * This build ships the SukiSU Nova frontend on top of the KernelSU-Next driver.
++ * KernelSU-Next speaks the same UAPI (version 6) for every core operation -
++ * superuser allowlist, app profiles, feature toggles, sulog, module lifecycle -
++ * but it does not implement the fork-only kernel interfaces SukiSU added later.
++ * Everything listed below as `false` is therefore gated in the UI instead of
++ * failing halfway through an operation.
++ */
++object BackendCapabilities {
++
++    const val KERNEL_FLAVOR = "KernelSU-Next"
++
++    /** Kernel Patch Module support (needs the SukiSU + KernelPatch kernel). */
++    const val supportsKpm = false
++
++    /**
++     * `KSU_IOCTL_EXTENSION`: CPU spoof, kernel-side version spoof, umount path
++     * bookkeeping and dynamic-manager switching.
++     */
++    const val supportsKernelExtensions = false
++
++    /** Switching the manager package at runtime (dynamic manager). */
++    const val supportsDynamicManager = false
++
++    /** Built-in zygisk toggle exposed by the fork's kernel. */
++    const val supportsBuiltinZygisk = false
++
++    /** `KSU_FEATURE_MOUNT_HIDE` (feature id 16). */
++    const val supportsMountHide = false
++
++    /**
++     * SukiSU's extended `ksud umount list/save/apply/clear-custom` path manager.
++     * KernelSU-Next only keeps the minimal `kernel umount add|del|wipe` list.
++     */
++    const val supportsUmountManager = false
++
++    /** `ksud late-load --magica` app-zygote bootstrap. */
++    const val supportsMagica = false
++
++    /**
++     * Kernel-side su log streaming. Both backends implement KSU_FEATURE_SULOG
++     * and the sulog fd ioctl, so this stays available.
++     */
++    const val supportsSulog = true
++
++    /** SuSFS is part of the KernelSU-Next kernel tree (kernel/susfs). */
++    const val supportsSuSfs = true
++}
+diff --git a/manager/app/src/main/java/com/sukisu/nova/ui/MainActivity.kt b/manager/app/src/main/java/com/sukisu/nova/ui/MainActivity.kt
+index 9ea99b0..1755a7a 100644
+--- a/manager/app/src/main/java/com/sukisu/nova/ui/MainActivity.kt
++++ b/manager/app/src/main/java/com/sukisu/nova/ui/MainActivity.kt
+@@ -131,6 +131,8 @@ import com.sukisu.nova.ui.screen.template.AppProfileTemplateScreen
+ import com.sukisu.nova.ui.screen.templateeditor.TemplateEditorScreen
+ import com.sukisu.nova.ui.screen.umountmanager.UmountManagerScreen
+ import com.sukisu.nova.ui.screen.builtinzygisk.BuiltinZygiskScreen
++import com.sukisu.nova.backend.BackendCapabilities
++import com.sukisu.nova.ui.screen.UnsupportedBackendScreen
+ import com.sukisu.nova.ui.theme.AiAssistantMaterialTheme
+ import com.sukisu.nova.ui.theme.KernelSUTheme
+ import com.sukisu.nova.ui.theme.LocalColorMode
+@@ -412,16 +414,58 @@ class MainActivity : ComponentActivity() {
+                                         key.kpmUndoPatch
+                                     )
+                                 }
+-                                entry<Route.Kpm>(swipeDismiss = swipeDismiss)  { KpmScreen() }
++                                entry<Route.Kpm>(swipeDismiss = swipeDismiss)  {
++                                    if (BackendCapabilities.supportsKpm) {
++                                        KpmScreen()
++                                    } else {
++                                        UnsupportedBackendScreen("KPM")
++                                    }
++                                }
+                                 entry<Route.SuSFS>(swipeDismiss = swipeDismiss)  { key -> SuSFSScreen(key.tab) }
+                                 entry<Route.Tool>(swipeDismiss = swipeDismiss)  { ToolsScreen() }
+-                                entry<Route.UmountManager>(swipeDismiss = swipeDismiss)  { UmountManagerScreen() }
++                                entry<Route.UmountManager>(swipeDismiss = swipeDismiss)  {
++                                    if (BackendCapabilities.supportsUmountManager) {
++                                        UmountManagerScreen()
++                                    } else {
++                                        UnsupportedBackendScreen("Umount paths")
++                                    }
++                                }
+                                 entry<Route.KernelModules>(swipeDismiss = swipeDismiss)  { KernelModulesScreen() }
+-                                entry<Route.DynamicManagers>(swipeDismiss = swipeDismiss) { DynamicManagersScreen() }
+-                                entry<Route.Extensions>(swipeDismiss = swipeDismiss) { ExtensionsScreen() }
+-                                entry<Route.CpuSpoof>(swipeDismiss = swipeDismiss) { CpuSpoofScreen() }
+-                                entry<Route.VersionSpoof>(swipeDismiss = swipeDismiss) { VersionSpoofScreen() }
+-                                entry<Route.BuiltinZygisk>(swipeDismiss = swipeDismiss) { BuiltinZygiskScreen() }
++                                entry<Route.DynamicManagers>(swipeDismiss = swipeDismiss) {
++                                    if (BackendCapabilities.supportsDynamicManager) {
++                                        DynamicManagersScreen()
++                                    } else {
++                                        UnsupportedBackendScreen("Dynamic manager")
++                                    }
++                                }
++                                entry<Route.Extensions>(swipeDismiss = swipeDismiss) {
++                                    if (BackendCapabilities.supportsKernelExtensions) {
++                                        ExtensionsScreen()
++                                    } else {
++                                        UnsupportedBackendScreen("Kernel extensions")
++                                    }
++                                }
++                                entry<Route.CpuSpoof>(swipeDismiss = swipeDismiss) {
++                                    if (BackendCapabilities.supportsKernelExtensions) {
++                                        CpuSpoofScreen()
++                                    } else {
++                                        UnsupportedBackendScreen("CPU spoof")
++                                    }
++                                }
++                                entry<Route.VersionSpoof>(swipeDismiss = swipeDismiss) {
++                                    if (BackendCapabilities.supportsKernelExtensions) {
++                                        VersionSpoofScreen()
++                                    } else {
++                                        UnsupportedBackendScreen("Version spoof")
++                                    }
++                                }
++                                entry<Route.BuiltinZygisk>(swipeDismiss = swipeDismiss) {
++                                    if (BackendCapabilities.supportsBuiltinZygisk) {
++                                        BuiltinZygiskScreen()
++                                    } else {
++                                        UnsupportedBackendScreen("Built-in Zygisk")
++                                    }
++                                }
+                                 entry<Route.AiAssistant>(swipeDismiss = swipeDismiss) {
+                                     if (!AiFeatureBridge.isAvailable) {
+                                         LaunchedEffect(Unit) { navigator.pop() }
+diff --git a/manager/app/src/main/java/com/sukisu/nova/ui/screen/UnsupportedBackend.kt b/manager/app/src/main/java/com/sukisu/nova/ui/screen/UnsupportedBackend.kt
+new file mode 100644
+index 0000000..6cd6e74
+--- /dev/null
++++ b/manager/app/src/main/java/com/sukisu/nova/ui/screen/UnsupportedBackend.kt
+@@ -0,0 +1,58 @@
++package com.sukisu.nova.ui.screen
++
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.padding
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.text.style.TextAlign
++import androidx.compose.ui.unit.dp
++import com.sukisu.nova.backend.BackendCapabilities
++
++/**
++ * Shown instead of a SukiSU-only screen when the running kernel backend
++ * (KernelSU-Next) does not implement the interface that screen needs.
++ */
++@Composable
++fun UnsupportedBackendScreen(feature: String, detail: String? = null) {
++    Box(
++        modifier = Modifier
++            .fillMaxSize()
++            .padding(horizontal = 32.dp, vertical = 48.dp),
++        contentAlignment = Alignment.Center,
++    ) {
++        Column(
++            horizontalAlignment = Alignment.CenterHorizontally,
++            verticalArrangement = Arrangement.spacedBy(10.dp),
++        ) {
++            Text(
++                text = feature,
++                style = MaterialTheme.typography.titleLarge,
++                textAlign = TextAlign.Center,
++            )
++            Text(
++                text = "当前内核后端：" + BackendCapabilities.KERNEL_FLAVOR,
++                style = MaterialTheme.typography.bodyMedium,
++                textAlign = TextAlign.Center,
++            )
++            Text(
++                text = "This feature needs a SukiSU kernel extension that the "
++                    + BackendCapabilities.KERNEL_FLAVOR + " driver does not provide.",
++                style = MaterialTheme.typography.bodySmall,
++                textAlign = TextAlign.Center,
++            )
++            if (!detail.isNullOrBlank()) {
++                Text(
++                    text = detail,
++                    style = MaterialTheme.typography.bodySmall,
++                    textAlign = TextAlign.Center,
++                )
++            }
++        }
++    }
++}
+diff --git a/manager/app/src/main/java/com/sukisu/nova/ui/util/KsuCli.kt b/manager/app/src/main/java/com/sukisu/nova/ui/util/KsuCli.kt
+index bd88484..c234de8 100644
+--- a/manager/app/src/main/java/com/sukisu/nova/ui/util/KsuCli.kt
++++ b/manager/app/src/main/java/com/sukisu/nova/ui/util/KsuCli.kt
+@@ -123,7 +123,15 @@ suspend fun getFeatureStatus(feature: String): String = withContext(Dispatchers.
+     val shell = getRootShell()
+     val out = shell.newJob()
+         .add("${getKsuDaemonPath()} feature check $feature").to(ArrayList<String>(), null).exec().out
+-    out.firstOrNull()?.trim().orEmpty()
++    val status = out.firstOrNull()?.trim().orEmpty()
++    // KernelSU-Next does not know SuSFS fork-local feature ids such as mount_hide;
++    // ksud answers with an error line instead of a status. Fold anything we do not
++    // recognise into "unsupported" so the settings row greys out instead of
++    // showing a raw CLI message.
++    when (status) {
++        "supported", "forced", "managed", "unsupported" -> status
++        else -> "unsupported"
++    }
+ }
+ 
+ suspend fun getFeaturePersistValue(feature: String): Long? = readFeatureValue("--config $feature")
+@@ -142,7 +150,9 @@ private suspend fun readFeatureValue(args: String): Long? = withContext(Dispatch
+ fun install() {
+     val start = SystemClock.elapsedRealtime()
+     val libadbroot = File(ksuApp.applicationInfo.nativeLibraryDir, "libadbroot.so").absolutePath
+-    val result = execKsud("install --libadbroot $libadbroot --data-path ${ksuApp.applicationInfo.deviceProtectedDataDir}", true)
++    // KernelSU-Next's `ksud install` only takes --libadbroot; SukiSU's --data-path
++    // option does not exist on this backend.
++    val result = execKsud("install --libadbroot $libadbroot", true)
+     Log.w(TAG, "install result: $result, cost: ${SystemClock.elapsedRealtime() - start}ms")
+ }
+ 
+@@ -178,7 +188,8 @@ fun toggleModule(id: String, enable: Boolean): Boolean {
+ }
+ 
+ fun undoUninstallModule(id: String): Boolean {
+-    val cmd = "module undo-uninstall $id"
++    // KernelSU-Next spells this `module restore`; SukiSU renamed it `undo-uninstall`.
++    val cmd = "module restore $id"
+     val result = execKsud(cmd, true)
+     Log.i(TAG, "undo uninstall module $id result: $result")
+     return result
+@@ -385,7 +396,8 @@ private fun bootPatchFlags(
+ ): String = buildString {
+     if (allowShell) append(" --allow-shell")
+     if (enableAdb) append(" --enable-adbd")
+-    if (forceBackup) append(" --backup")
++    // `--backup` (force stock backup) is a SukiSU patch flag; the KernelSU-Next
++    // boot-patch has no such option, so forceBackup is intentionally ignored.
+     // Names are validated in the UI before install; pass them through without
+     // mutating. Drop the flag entirely (never inject) if anything slips through.
+     val names = parseBlockModules(blockModules)
+@@ -441,8 +453,9 @@ fun installBoot(
+     }
+     cmd += bootPatchFlags(allowShell, enableAdb, forceBackup, blockModules)
+ 
+-    cmd += " --spoof-release ${spoofRelease.trim().shellArg()}"
+-    cmd += " --spoof-version ${spoofVersion.trim().shellArg()}"
++    // `--spoof-release` / `--spoof-version` are SukiSU boot-patch options.
++    // KernelSU-Next has no such flags; uname spoofing lives in SuSFS instead
++    // (`ksud susfs set-uname`), so the values are dropped here.
+ 
+     if (ota) {
+         cmd += " -u"
+@@ -578,8 +591,9 @@ fun downloadBoot(
+     var cmd = "${getKsuDaemonPath()} boot-patch -b ${bootFile.absolutePath}"
+     cmd += bootPatchFlags(allowShell, enableAdb, forceBackup, blockModules)
+ 
+-    cmd += " --spoof-release ${spoofRelease.trim().shellArg()}"
+-    cmd += " --spoof-version ${spoofVersion.trim().shellArg()}"
++    // `--spoof-release` / `--spoof-version` are SukiSU boot-patch options.
++    // KernelSU-Next has no such flags; uname spoofing lives in SuSFS instead
++    // (`ksud susfs set-uname`), so the values are dropped here.
+ 
+     val lkmFile = writeLkmFile(lkm)
+     if (lkmFile != null) {
+diff --git a/scripts/manager-signature.ps1 b/scripts/manager-signature.ps1
+new file mode 100644
+index 0000000..0426097
+--- /dev/null
++++ b/scripts/manager-signature.ps1
+@@ -0,0 +1,85 @@
++# Prints the Kbuild arguments that let the KernelSU-Next kernel accept this manager APK.
++#
++#   .\scripts\manager-signature.ps1 -Keystore .\release.jks -Alias key -StorePass ****
++#   .\scripts\manager-signature.ps1 -Apk .\KernelSU-Next-SukiUI-release.apk
++#
++# Output (feed it straight into the kernel build):
++#   KSU_MANAGER_PACKAGE=com.sukisu.nova
++#   KSU_NEXT_MANAGER_SIZE=0x...
++#   KSU_NEXT_MANAGER_HASH=<sha256 of the signing certificate DER, lowercase hex>
++
++param(
++    [string]$Apk,
++    [string]$Keystore,
++    [string]$Alias = "key",
++    [string]$StorePass,
++    [string]$Package = "com.sukisu.nova"
++)
++
++$ErrorActionPreference = "Stop"
++
++function Find-KeyTool {
++    $cmd = Get-Command keytool -ErrorAction SilentlyContinue
++    if ($cmd) { return $cmd.Source }
++    foreach ($root in @("$env:JAVA_HOME", "C:\Program Files\Java", "C:\Program Files\Eclipse Adoptium", "C:\Program Files\Microsoft")) {
++        if (-not $root -or -not (Test-Path $root)) { continue }
++        $hit = Get-ChildItem -Path $root -Recurse -Filter keytool.exe -ErrorAction SilentlyContinue | Select-Object -First 1
++        if ($hit) { return $hit.FullName }
++    }
++    return $null
++}
++
++function Emit([byte[]]$der) {
++    $sha = [System.Security.Cryptography.SHA256]::Create()
++    try { $digest = $sha.ComputeHash($der) } finally { $sha.Dispose() }
++    $hex = -join ($digest | ForEach-Object { $_.ToString("x2") })
++    Write-Output "KSU_MANAGER_PACKAGE=$Package"
++    Write-Output ("KSU_NEXT_MANAGER_SIZE=0x{0:x}" -f $der.Length)
++    Write-Output "KSU_NEXT_MANAGER_HASH=$hex"
++}
++
++if ($Keystore) {
++    if (-not (Test-Path $Keystore)) { throw "keystore not found: $Keystore" }
++    $keytool = Find-KeyTool
++    if (-not $keytool) { throw "keytool not found; install a JDK or pass -Apk instead" }
++    $pem = & $keytool -exportcert -rfc -keystore $Keystore -alias $Alias -storepass $StorePass 2>$null
++    if ($LASTEXITCODE -ne 0 -or -not $pem) { throw "keytool failed to export alias '$Alias'" }
++    $b64 = ($pem | Where-Object { $_ -notmatch "-----" }) -join ""
++    Emit ([Convert]::FromBase64String($b64))
++    exit 0
++}
++
++if (-not $Apk) { throw "pass -Keystore or -Apk" }
++if (-not (Test-Path $Apk)) { throw "apk not found: $Apk" }
++
++# Preferred path: ask apksigner for the signer digest, then find the certificate
++# blob in the APK that hashes to it (that is exactly what the kernel verifies).
++$apksigner = Get-Command apksigner -ErrorAction SilentlyContinue
++$expected = $null
++if ($apksigner) {
++    $out = & $apksigner.Source verify --print-certs $Apk 2>$null
++    $line = $out | Where-Object { $_ -match "SHA-256 digest:" } | Select-Object -First 1
++    if ($line) { $expected = ($line -split ":")[-1].Trim().ToLowerInvariant() }
++}
++
++$bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $Apk))
++$start = [Math]::Max(0, $bytes.Length - 4 * 1024 * 1024)
++$sha = [System.Security.Cryptography.SHA256]::Create()
++try {
++    for ($i = $start; $i -lt $bytes.Length - 5; $i++) {
++        if ($bytes[$i] -ne 0x30 -or $bytes[$i + 1] -ne 0x82) { continue }
++        $len = 4 + ([int]$bytes[$i + 2] * 256 + [int]$bytes[$i + 3])
++        if ($i + $len -gt $bytes.Length) { continue }
++        $der = New-Object byte[] $len
++        [Array]::Copy($bytes, $i, $der, 0, $len)
++        $digest = $sha.ComputeHash($der)
++        $hex = -join ($digest | ForEach-Object { $_.ToString("x2") })
++        if ($expected -and $hex -ne $expected) { continue }
++        Write-Output "KSU_MANAGER_PACKAGE=$Package"
++        Write-Output ("KSU_NEXT_MANAGER_SIZE=0x{0:x}" -f $len)
++        Write-Output "KSU_NEXT_MANAGER_HASH=$hex"
++        exit 0
++    }
++} finally { $sha.Dispose() }
++
++throw "could not locate the signing certificate inside $Apk"
+diff --git a/userspace/ksud/src/cli.rs b/userspace/ksud/src/cli.rs
+index 30504d0..807aa2f 100644
+--- a/userspace/ksud/src/cli.rs
++++ b/userspace/ksud/src/cli.rs
+@@ -53,7 +53,7 @@ enum Commands {
+         kmi: Option<String>,
+ 
+         /// manager package name
+-        #[arg(long, default_value_t = String::from("com.rifsxd.ksunext"))]
++        #[arg(long, default_value_t = String::from("com.sukisu.nova"))]
+         package_name: String,
+     },
+ 
+@@ -77,7 +77,7 @@ enum Commands {
+ 
+     /// Uninstall KernelSU Next modules and itself(LKM Only)
+     Uninstall {
+-        #[arg(long, default_value_t = String::from("com.rifsxd.ksunext"))]
++        #[arg(long, default_value_t = String::from("com.sukisu.nova"))]
+         package_name: String,
+     },
+ 
+@@ -181,7 +181,7 @@ enum Debug {
+     /// Set the manager app, kernel CONFIG_KSU_DEBUG should be enabled.
+     SetManager {
+         /// manager package name
+-        #[arg(default_value_t = String::from("com.rifsxd.ksunext"))]
++        #[arg(default_value_t = String::from("com.sukisu.nova"))]
+         apk: String,
+     },
+ 
+diff --git a/userspace/ksud/src/late_load.rs b/userspace/ksud/src/late_load.rs
+index c086df0..4a2dc0f 100644
+--- a/userspace/ksud/src/late_load.rs
++++ b/userspace/ksud/src/late_load.rs
+@@ -142,7 +142,7 @@ pub fn run(package_name: &String, kmi: Option<String>, allow_shell: bool) -> Res
+         .args([
+             "start",
+             "-n",
+-            &format!("{package_name}/com.rifsxd.ksunext.ui.MainActivity"),
++            &format!("{package_name}/com.sukisu.nova.ui.MainActivity"),
+         ])
+         .status();
+ 

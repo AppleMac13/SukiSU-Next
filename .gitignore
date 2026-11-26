@@ -1,0 +1,20 @@
+.idea
+.vscode
+CLAUDE.md
+AGENTS.md
+.DS_Store
+/userspace/ksud/.lkm_image_bootstrap.o
+
+# ---- port: build products and secrets ----
+manager/app/build/
+manager/build/
+manager/.gradle/
+manager/local.properties
+userspace/ksud/target/
+manager/app/src/main/jniLibs/**/*.so
+*.apk
+*.aab
+*.jks
+*.keystore
+*.der
+*.p12
