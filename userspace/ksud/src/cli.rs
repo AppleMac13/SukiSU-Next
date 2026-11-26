@@ -57,6 +57,14 @@ enum Commands {
         /// Detach from the su session that started the bridge
         #[arg(long)]
         daemonize: bool,
+
+        /// Socket that su requests are accepted on (disabled when omitted)
+        #[arg(long)]
+        req_socket: Option<PathBuf>,
+
+        /// Manager component to raise for a su request, as pkg/activity
+        #[arg(long, default_value = "com.appstor678.sukisunext/com.sukisu.nova.ui.SuRequestActivity")]
+        manager: String,
     },
 
     /// Trigger `boot-complete` event
@@ -792,7 +800,16 @@ pub fn run() -> Result<()> {
             token,
             peer_uid,
             daemonize,
-        } => crate::proxy::run(&socket, &token, peer_uid, daemonize),
+            req_socket,
+            manager,
+        } => crate::proxy::run(
+            &socket,
+            &token,
+            peer_uid,
+            daemonize,
+            req_socket.as_deref(),
+            &manager,
+        ),
         Commands::TemporaryRoot { command } => match command {
             TemporaryRootOp::Apply {
                 manager_uid,

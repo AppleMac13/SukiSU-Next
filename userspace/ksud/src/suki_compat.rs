@@ -168,3 +168,48 @@ fn uid_of_package(package: &str) -> Option<i32> {
     }
     None
 }
+
+/// Where the root bridge listens for su requests. Under /data/local/tmp because
+/// the asking process is an ordinary app uid and the socket has to be reachable
+/// before anything is granted.
+pub const REQUEST_SOCKET: &str = "/data/local/tmp/.ksu-req.sock";
+
+/// Ask the manager whether this uid may have root, blocking until it answers.
+///
+/// KernelSU-Next's kernel has no notion of a pending request: an uid is either
+/// on the allowlist or it silently runs unprivileged. The manager is therefore
+/// asked through the bridge, and approval means the profile is written before
+/// this returns, so the following ioctl succeeds.
+pub fn request_root_approval() -> bool {
+    use std::io::{Read, Write};
+    use std::os::unix::net::UnixStream;
+
+    let path = std::env::var("KSU_REQUEST_SOCKET").unwrap_or_else(|_| REQUEST_SOCKET.to_string());
+    let mut stream = match UnixStream::connect(&path) {
+        Ok(s) => s,
+        Err(e) => {
+            log::warn!("no su request bridge at {path}: {e}");
+            return false;
+        }
+    };
+
+    let cmdline = std::env::args().collect::<Vec<_>>().join(" ");
+    // First line: the requesting process, so the manager can name something that
+    // has no package of its own (shell, a helper spawned by an app).
+    let name = std::fs::read_to_string("/proc/self/cmdline")
+        .map(|raw| raw.split('\0').next().unwrap_or("").to_string())
+        .unwrap_or_default();
+    let payload = format!("{name}\n{cmdline}");
+    let len = payload.len() as u32;
+    if stream.write_all(&len.to_le_bytes()).is_err()
+        || stream.write_all(payload.as_bytes()).is_err()
+    {
+        return false;
+    }
+
+    let mut answer = [0u8; 1];
+    match stream.read_exact(&mut answer) {
+        Ok(()) => answer[0] == 1,
+        Err(_) => false,
+    }
+}

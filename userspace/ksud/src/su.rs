@@ -111,6 +111,25 @@ fn wrap_tty(fd: c_int) {
 
 #[allow(clippy::similar_names)]
 pub fn root_shell() -> Result<()> {
+    // KernelSU-Next never leaves a root request pending: when a uid is not on
+    // the allowlist its `su` simply runs unprivileged. Ask the manager through
+    // the bridge first, then re-exec the very same path once the profile
+    // exists - sucompat only hands out root at execve time.
+    if getuid().as_raw() != 0 {
+        if std::env::var_os("KSU_REQUEST_ANSWERED").is_some() {
+            log::warn!("su request already answered, still unprivileged");
+        } else if crate::suki_compat::request_root_approval() {
+            use std::os::unix::process::CommandExt;
+            let argv: Vec<String> = std::env::args().collect();
+            let err = std::process::Command::new("/system/bin/su")
+                .args(&argv[1..])
+                .arg0(&argv[0])
+                .env("KSU_REQUEST_ANSWERED", "1")
+                .exec();
+            log::warn!("re-exec after approval failed: {err}");
+        }
+    }
+
     // The kernel has already applied the selected root profile.
 
     // A su-session driver fd deliberately survives the exec into ksud. Claim

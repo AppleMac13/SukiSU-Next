@@ -24,8 +24,28 @@ use std::path::Path;
 
 pub const MAX_ARG: usize = 1 << 20;
 const MAX_TOKEN: usize = 128;
+const MAX_REQUEST: usize = 4096;
 
-pub fn run(socket: &Path, token: &str, peer_uid: u32, daemonize: bool) -> anyhow::Result<()> {
+/// Application-level op the manager uses to answer a pending su request. It
+/// never reaches the driver.
+pub const OP_DECISION: u32 = 0xFFFF_FFFF;
+
+type Pending = std::sync::Mutex<std::collections::HashMap<u32, std::sync::mpsc::Sender<bool>>>;
+
+static PENDING: std::sync::OnceLock<Pending> = std::sync::OnceLock::new();
+
+fn pending() -> &'static Pending {
+    PENDING.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
+pub fn run(
+    socket: &Path,
+    token: &str,
+    peer_uid: u32,
+    daemonize: bool,
+    req_socket: Option<&Path>,
+    manager: &str,
+) -> anyhow::Result<()> {
     if unsafe { libc::getuid() } != 0 {
         anyhow::bail!("proxy must run as root");
     }
@@ -41,6 +61,36 @@ pub fn run(socket: &Path, token: &str, peer_uid: u32, daemonize: bool) -> anyhow
 
     if ksucalls_fd() < 0 {
         anyhow::bail!("could not obtain the kernelsu driver fd");
+    }
+
+    if let Some(req) = req_socket {
+        let _ = std::fs::remove_file(req);
+        match UnixListener::bind(req) {
+            Ok(listener) => {
+                std::fs::set_permissions(req, std::fs::Permissions::from_mode(0o666))?;
+                let manager = manager.to_owned();
+                std::thread::spawn(move || {
+                    for conn in listener.incoming() {
+                        match conn {
+                            Ok(stream) => {
+                                let manager = manager.clone();
+                                std::thread::spawn(move || {
+                                    if let Err(e) = serve_request(stream, &manager) {
+                                        log::warn!("su request ended: {e}");
+                                    }
+                                });
+                            }
+                            Err(e) => {
+                                log::warn!("su request accept failed: {e}");
+                                break;
+                            }
+                        }
+                    }
+                });
+                log::info!("su requests on {}", req.display());
+            }
+            Err(e) => log::warn!("could not listen for su requests on {}: {e}", req.display()),
+        }
     }
 
     let _ = std::fs::remove_file(socket);
@@ -174,7 +224,13 @@ fn serve(mut stream: UnixStream, token: &str, peer_uid: u32) -> anyhow::Result<(
         } else {
             arg.as_mut_ptr().cast()
         };
-        let ret = run_ioctl(fd, op, ptr, manager);
+
+        let ret = if op == OP_DECISION {
+            resolve_decision(&arg);
+            0
+        } else {
+            run_ioctl(fd, op, ptr, manager)
+        };
 
         let mut out = Vec::with_capacity(8 + size);
         out.extend_from_slice(&ret.to_le_bytes());
@@ -183,6 +239,115 @@ fn serve(mut stream: UnixStream, token: &str, peer_uid: u32) -> anyhow::Result<(
         stream.write_all(&out)?;
     }
 }
+
+/// `[u32 uid][u8 allow]` from the manager: hand the answer to the su process
+/// waiting in [`serve_request`].
+fn resolve_decision(payload: &[u8]) {
+    if payload.len() < 5 {
+        log::warn!("decision payload too short");
+        return;
+    }
+    let uid = u32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]);
+    let allow = payload[4] != 0;
+    if let Some(tx) = pending().lock().unwrap_or_else(|e| e.into_inner()).remove(&uid) {
+        let _ = tx.send(allow);
+        log::info!("su decision for uid {uid}: {allow}");
+    } else {
+        log::warn!("no pending su request for uid {uid}");
+    }
+}
+
+fn serve_request(mut stream: UnixStream, manager: &str) -> anyhow::Result<()> {
+    let uid = peer_uid_of(&stream)?;
+
+    let mut hdr = [0u8; 4];
+    stream.read_exact(&mut hdr)?;
+    let len = u32::from_le_bytes(hdr) as usize;
+    if len > MAX_REQUEST {
+        anyhow::bail!("request too long: {len}");
+    }
+    let mut cmd = vec![0u8; len];
+    if len > 0 {
+        stream.read_exact(&mut cmd)?;
+    }
+    let payload = String::from_utf8_lossy(&cmd).to_string();
+    let (name, cmd) = match payload.split_once('\n') {
+        Some((name, cmd)) => (name.to_string(), cmd.replace('\n', " ")),
+        None => (String::new(), payload.replace('\n', " ")),
+    };
+
+    let key = package_of_uid(uid).unwrap_or_default();
+    let label = if key.is_empty() {
+        if name.is_empty() {
+            format!("uid {uid}")
+        } else {
+            format!("{name} (uid {uid})")
+        }
+    } else {
+        format!("{key} (uid {uid})")
+    };
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    pending()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(uid, tx);
+
+    // Bring the manager to the front asking about this uid. The manager writes
+    // the profile itself and answers over the bridge socket.
+    let status = std::process::Command::new("/system/bin/am")
+        .args([
+            "start",
+            "--user",
+            "0",
+            "-n",
+            manager,
+            "--es",
+            "su_uid",
+            &uid.to_string(),
+            "--es",
+            "su_key",
+            &key,
+            "--es",
+            "su_name",
+            &name,
+            "--es",
+            "su_cmd",
+            &cmd,
+        ])
+        .env("PATH", "/system/bin:/system/xbin")
+        .status();
+    if let Err(e) = status {
+        log::warn!("could not start the manager for a su request: {e}");
+    }
+
+    let allow = rx
+        .recv_timeout(std::time::Duration::from_secs(90))
+        .unwrap_or(false);
+    pending()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .remove(&uid);
+
+    stream.write_all(&[u8::from(allow)])?;
+    log::info!("su request from {label}: {allow}");
+    Ok(())
+}
+
+/// The package that owns a uid, from the list the system keeps for itself.
+fn package_of_uid(uid: u32) -> Option<String> {
+    let list = "/data/system/packages.list";
+    let text = std::fs::read_to_string(list).ok()?;
+    for line in text.lines() {
+        let mut fields = line.split_whitespace();
+        let package = fields.next()?;
+        if fields.next().and_then(|v| v.parse::<u32>().ok()) == Some(uid) {
+            return Some(package.to_string());
+        }
+    }
+    None
+}
+
 
 fn peer_uid_of(stream: &UnixStream) -> anyhow::Result<u32> {
     let mut cred: libc::ucred = unsafe { std::mem::zeroed() };

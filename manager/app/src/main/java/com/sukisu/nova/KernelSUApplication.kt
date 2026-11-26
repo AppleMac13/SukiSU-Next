@@ -87,10 +87,12 @@ class KernelSUApplication : Application(), ViewModelStoreOwner {
         }
 
         // A kernel built for another APK certificate refuses this manager outright;
-        // bring up the root bridge before anything reads kernel state.
-        if (!Natives.isManager) {
-            SuBridge.ensureReady(this)
-        }
+        // bring up the root bridge before anything reads kernel state. This is always
+        // attempted: `isManager` cannot be trusted here, because the kernel may report
+        // the manager flag for a uid it merely tolerates, and a live bridge is the only
+        // thing that makes kernel state readable at all. The call is a no-op once the
+        // bridge is up.
+        SuBridge.ensureReady(this)
 
         // Launcher components are intentionally left alone while the process starts. An update
         // resets their enabled states to the manifest defaults, so the first launch after a

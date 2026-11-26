@@ -209,6 +209,16 @@
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <activity
+            android:name=".ui.SuRequestActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:turnScreenOn="true"
+            android:showWhenLocked="true"
+            android:launchMode="singleInstance"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <activity
             android:name=".ui.webui.WebUIActivity"
             android:autoRemoveFromRecents="true"
             android:configChanges="density|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|locale|layoutDirection|fontScale|keyboard|keyboardHidden"

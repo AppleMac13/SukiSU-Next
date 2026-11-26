@@ -93,6 +93,10 @@ bool get_allow_list(struct ksu_new_get_allow_list_cmd *);
 // ioctls are replayed through a privileged helper started via su.
 void set_proxy_config(const char *path, const char *token);
 
+// Tells the root bridge whether a pending su request was approved. Does not go
+// through the driver: the bridge hands the answer to the waiting su process.
+bool proxy_send_decision(int uid, bool allow);
+
 bool proxy_available();
 
 inline std::pair<int, int> legacy_get_info() {

@@ -20,6 +20,7 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/time.h>
 #include <fcntl.h>
 #include <cerrno>
 #include "ksu.h"
@@ -159,6 +160,41 @@ static int proxy_connect() {
 bool proxy_available() {
     return proxy_connect() == 0;
 }
+
+// Application-level op understood by the bridge itself (never forwarded to the
+// driver): payload is [u32 uid][u8 allow].
+static constexpr uint32_t OP_DECISION = 0xFFFFFFFFu;
+
+bool proxy_send_decision(int uid, bool allow) {
+    if (proxy_connect() < 0) return false;
+
+    uint32_t payload[2] = {static_cast<uint32_t>(uid),
+                           static_cast<uint8_t>(allow ? 1 : 0)};
+    uint32_t req[2] = {OP_DECISION, 5};
+
+    struct timeval tv = {};
+    tv.tv_sec = 3;
+    setsockopt(g_proxy_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
+    bool ok = write_exact(g_proxy_fd, req, sizeof(req)) &&
+              write_exact(g_proxy_fd, payload, 5);
+
+    int32_t ret = -EPERM;
+    uint32_t rsize = 0;
+    ok = ok && read_exact(g_proxy_fd, &ret, sizeof(ret)) &&
+         read_exact(g_proxy_fd, &rsize, sizeof(rsize)) && rsize == 5;
+
+    struct timeval none = {};
+    setsockopt(g_proxy_fd, SOL_SOCKET, SO_RCVTIMEO, &none, sizeof(none));
+
+    if (!ok) {
+        proxy_disconnect();
+        return false;
+    }
+    LOGD("decision for uid %d delivered: %d", uid, ret);
+    return ret == 0;
+}
+
 
 // Replays one ioctl. KernelSU encodes no argument size in its ioctl numbers
 // (`_IOC(..., 0)`), so the caller has to state it - the C++ side knows the

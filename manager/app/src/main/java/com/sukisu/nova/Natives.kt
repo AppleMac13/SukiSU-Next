@@ -95,6 +95,9 @@ object Natives {
     external fun getAppProfile(key: String?, uid: Int): Profile
     external fun setAppProfile(profile: Profile?): Boolean
 
+    /** 回传 su 请求的审批结果给 root 桥（KernelSU-Next 内核无阻塞式请求机制） */
+    external fun suRequestDecision(uid: Int, allow: Boolean): Boolean
+
     /**
      * `su` compat mode can be disabled temporarily.
      *  0: disabled

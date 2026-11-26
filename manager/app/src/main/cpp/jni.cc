@@ -238,6 +238,12 @@ Java_com_sukisu_nova_Natives_getAppProfile(JNIEnv *env, jobject, jstring pkg, ji
 
 extern "C"
 JNIEXPORT jboolean JNICALL
+Java_com_sukisu_nova_Natives_suRequestDecision(JNIEnv *, jobject, jint uid, jboolean allow) {
+    return proxy_send_decision(static_cast<int>(uid), allow == JNI_TRUE) ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C"
+JNIEXPORT jboolean JNICALL
 Java_com_sukisu_nova_Natives_setAppProfile(JNIEnv *env, jobject clazz, jobject profile) {
     auto cls = env->FindClass("com/sukisu/nova/Natives$Profile");
 

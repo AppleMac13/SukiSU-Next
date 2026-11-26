@@ -34,6 +34,7 @@ object SuBridge {
     /** Starts the bridge once per process; returns whether it is usable. */
     @Synchronized
     fun ensureReady(context: Context): Boolean {
+        Log.i(TAG, "ensureReady: ready=$ready started=${started.get()}")
         if (ready) return true
         if (started.get()) return false
 
@@ -65,8 +66,13 @@ object SuBridge {
         val install = "rm -f '${socket.absolutePath}'; " +
                 "kill \$(pidof ksud-bridge 2>/dev/null) 2>/dev/null; " +
                 "cp '${lib.absolutePath}' '$BRIDGE_BIN' && chmod 0755 '$BRIDGE_BIN'"
+        // Root-side su requests: the kernel never leaves one pending, so unlisted
+        // uids have to be asked about here. The helper raises SuRequestActivity.
+        val requestSocket = "/data/local/tmp/.ksu-req.sock"
+        val manager = "${context.packageName}/com.sukisu.nova.ui.SuRequestActivity"
         val run = "$BRIDGE_BIN proxy --socket '${socket.absolutePath}' " +
-                "--token '$token' --peer-uid $uid --daemonize"
+                "--token '$token' --peer-uid $uid --daemonize " +
+                "--req-socket '$requestSocket' --manager '$manager'"
 
         val installed = runSu(context, install, 20_000)
         if (!installed) {
