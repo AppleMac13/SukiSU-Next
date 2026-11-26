@@ -14,7 +14,8 @@ extra["androidCompileNdkVersion"] = libs.versions.ndk.get()
 extra["androidSourceCompatibility"] = JavaVersion.VERSION_21
 extra["androidTargetCompatibility"] = JavaVersion.VERSION_21
 extra["managerVersionCode"] = getVersionCode()
-extra["managerVersionName"] = getVersionName()
+// 移植版固定版本名；versionCode 仍按上游公式递增，保证能覆盖安装。
+extra["managerVersionName"] = "0.0.1"
 
 fun getGitCommitCount(): Int {
     val process = Runtime.getRuntime().exec(arrayOf("git", "rev-list", "--count", "HEAD"))
