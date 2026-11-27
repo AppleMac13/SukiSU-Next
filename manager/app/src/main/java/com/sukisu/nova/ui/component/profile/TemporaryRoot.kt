@@ -13,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.sukisu.nova.Natives
+import com.sukisu.nova.backend.KernelManager
 import com.sukisu.nova.ui.LocalUiMode
 import com.sukisu.nova.ui.UiMode
 import com.sukisu.nova.R
@@ -49,7 +50,7 @@ object TemporaryRoot {
         val mode = if (!updateLease) "keep" else seconds?.toString() ?: "permanent"
         val json = profileJson.encodeToString(Natives.Profile.serializer(), profile)
         getRootShell().newJob().add(
-            "${quote(getKsuDaemonPath())} temporary-root apply ${Process.myUid()} " +
+            "${quote(getKsuDaemonPath())} temporary-root apply ${KernelManager.uid()} " +
                 "$mode $expectedRoot ${quote(json)}"
         ).exec().isSuccess
     }

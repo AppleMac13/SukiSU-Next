@@ -69,8 +69,13 @@ fn ksu_domain() -> String {
 }
 
 /// `temporary-root apply <manager-uid> <mode> <expected-root> <json>`
+///
+/// `manager_uid` is the uid the manager passes in, i.e. the package the kernel
+/// pinned as its manager. This kernel answers `GET_MANAGER_APPID` with 0 for
+/// root and gates `SET_APP_PROFILE` on `is_manager()`, so the grant only lands
+/// when it is issued while carrying that uid.
 pub fn temporary_root_apply(
-    _manager_uid: i32,
+    manager_uid: i32,
     _mode: &str,
     expected_root: bool,
     json: &str,
@@ -81,12 +86,18 @@ pub fn temporary_root_apply(
         bail!("the profile carries no key");
     }
 
+    // packages.list is root-only; resolve it before borrowing the manager uid.
     let uid = if wanted.current_uid != 0 {
         wanted.current_uid
     } else {
         uid_of_package(&wanted.name).unwrap_or(wanted.uid)
     };
+    let borrow = u32::try_from(manager_uid).unwrap_or(0);
 
+    ksucalls::as_uid(borrow, || apply_profile(wanted, uid, expected_root))
+}
+
+fn apply_profile(wanted: ProfileJson, uid: i32, expected_root: bool) -> Result<()> {
     // `expectedRoot` is the state the editor was showing. Refuse when the kernel
     // has moved on since then, which is how a stale editor is kept from
     // resurrecting a grant that was already revoked.

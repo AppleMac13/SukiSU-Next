@@ -78,7 +78,8 @@ object SuBridge {
         val manager = "${context.packageName}/com.sukisu.nova.ui.SuRequestActivity"
         val run = "$BRIDGE_BIN proxy --socket '${socket.absolutePath}' " +
                 "--token '$token' --peer-uid $uid --daemonize " +
-                "--req-socket '$requestSocket' --manager '$manager'"
+                "--req-socket '$requestSocket' --manager '$manager' " +
+                "--borrow-uid ${KernelManager.uid(context)}"
 
         val installed = runSu(context, install, 20_000)
         if (!installed) {

@@ -65,6 +65,12 @@ enum Commands {
         /// Manager component to raise for a su request, as pkg/activity
         #[arg(long, default_value = "com.appstor678.sukisunext/com.sukisu.nova.ui.SuRequestActivity")]
         manager: String,
+
+        /// Uid of the package the kernel pinned as manager, used to borrow its
+        /// identity for commands the driver only serves to the manager (0 = ask
+        /// the driver, which answers 0 on this build)
+        #[arg(long, default_value_t = 0)]
+        borrow_uid: u32,
     },
 
     /// Trigger `boot-complete` event
@@ -802,6 +808,7 @@ pub fn run() -> Result<()> {
             daemonize,
             req_socket,
             manager,
+            borrow_uid,
         } => crate::proxy::run(
             &socket,
             &token,
@@ -809,6 +816,7 @@ pub fn run() -> Result<()> {
             daemonize,
             req_socket.as_deref(),
             &manager,
+            borrow_uid,
         ),
         Commands::TemporaryRoot { command } => match command {
             TemporaryRootOp::Apply {

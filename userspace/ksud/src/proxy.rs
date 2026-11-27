@@ -45,6 +45,7 @@ pub fn run(
     daemonize: bool,
     req_socket: Option<&Path>,
     manager: &str,
+    borrow_uid: u32,
 ) -> anyhow::Result<()> {
     if unsafe { libc::getuid() } != 0 {
         anyhow::bail!("proxy must run as root");
@@ -105,7 +106,7 @@ pub fn run(
             Ok(stream) => {
                 let token = token.clone();
                 std::thread::spawn(move || {
-                    if let Err(e) = serve(stream, &token, peer_uid) {
+                    if let Err(e) = serve(stream, &token, peer_uid, borrow_uid) {
                         log::warn!("proxy client ended: {e}");
                     }
                 });
@@ -179,7 +180,7 @@ fn run_ioctl(fd: i32, op: u32, ptr: *mut libc::c_void, manager_appid: u32) -> i3
     }
 }
 
-fn serve(mut stream: UnixStream, token: &str, peer_uid: u32) -> anyhow::Result<()> {
+fn serve(mut stream: UnixStream, token: &str, peer_uid: u32, borrow_uid: u32) -> anyhow::Result<()> {
     let uid = peer_uid_of(&stream)?;
     if peer_uid != 0 && uid != peer_uid {
         anyhow::bail!("unexpected peer uid {uid}");
@@ -201,7 +202,13 @@ fn serve(mut stream: UnixStream, token: &str, peer_uid: u32) -> anyhow::Result<(
     if fd < 0 {
         anyhow::bail!("driver fd lost");
     }
-    let manager = manager_appid(fd);
+    // The kernel does not tell root who its manager is on every build
+    // (`GET_MANAGER_APPID` answers 0 here), so the manager passes the uid of the
+    // package it pinned; commands gated on `is_manager()` are retried under it.
+    let manager = match manager_appid(fd) {
+        0 => borrow_uid,
+        id => id,
+    };
 
     loop {
         let mut req = [0u8; 8];

@@ -42,8 +42,20 @@ import java.util.zip.ZipFile
  */
 private const val TAG = "KsuCli"
 
+// SukiSU fork build: understands temporary-root / profile editing / zygisk / kpm, and the
+// borrow-manager-uid dance this ported kernel needs. Used for everything except module install.
 fun getKsuDaemonPath(): String {
-    return ksuApp.applicationInfo.nativeLibraryDir + File.separator + "libksud.so"
+    val dir = ksuApp.applicationInfo.nativeLibraryDir
+    val fork = File(dir, "libksubridge.so")
+    return if (fork.exists()) fork.absolutePath else File(dir, "libksud.so").absolutePath
+}
+
+// Kernel-matched ksud daemon (3.4.2, uapi 5): its module installer is the one that actually
+// runs the module scripts on this kernel, so module install stays pinned to it.
+fun getKsuModulePath(): String {
+    val dir = ksuApp.applicationInfo.nativeLibraryDir
+    val kernel = File(dir, "libksud.so")
+    return if (kernel.exists()) kernel.absolutePath else getKsuDaemonPath()
 }
 
 // Single-quote a value for safe interpolation
@@ -255,7 +267,7 @@ fun flashModule(
             return FlashResult(1, message, false)
         }
         val cmd = "module install ${file.absolutePath}"
-        val result = flashWithIO("${getKsuDaemonPath()} $cmd", onStdout, onStderr)
+        val result = flashWithIO("${getKsuModulePath()} $cmd", onStdout, onStderr)
         Log.i("KernelSU", "install module $uri result: $result")
         if (shouldDeleteSourceAfterInstall(deleteSourceOnSuccess, result.isSuccess)) {
             val name = runCatching { uri.getFileName(ksuApp) }.getOrNull()

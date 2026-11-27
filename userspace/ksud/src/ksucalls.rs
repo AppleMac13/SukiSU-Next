@@ -560,6 +560,39 @@ pub fn set_ksu_no_new_privs() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Run `f` while the process carries `uid` as its real uid.
+///
+/// The driver decides `is_manager()` by comparing the *real* uid, and this
+/// kernel answers `GET_MANAGER_APPID` with 0 for root, so the id has to come
+/// from outside (the manager knows which package the kernel pinned). The
+/// saved-set uid keeps 0 around so root comes back afterwards.
+pub fn as_uid<T, F>(uid: u32, f: F) -> Result<T>
+where
+    F: FnOnce() -> Result<T>,
+{
+    if uid == 0 {
+        return f();
+    }
+    static BORROW: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = BORROW.lock().unwrap_or_else(|e| e.into_inner());
+
+    if unsafe { libc::geteuid() } != 0 {
+        return f();
+    }
+
+    unsafe {
+        if libc::setresuid(uid, uid, 0) != 0 {
+            bail!("could not borrow uid {uid}: {}", std::io::Error::last_os_error());
+        }
+    }
+    let result = f();
+    unsafe {
+        libc::setresuid(u32::MAX, 0, u32::MAX);
+        libc::setresuid(0, 0, 0);
+    }
+    result
+}
+
 fn describe_profile_error(e: &std::io::Error) -> anyhow::Error {
     match e.raw_os_error() {
         Some(libc::EPERM) => anyhow::anyhow!(
