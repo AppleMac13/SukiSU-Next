@@ -272,8 +272,16 @@ pub fn is_preinit_supported() -> bool {
     get_info().flags & ksu_uapi::KSU_GET_INFO_FLAG_PREINIT != 0
 }
 
-pub const fn uapi_version() -> u32 {
-    ksu_uapi::KERNEL_SU_UAPI_VERSION
+/// 本 ksud 按上游 master 的 uapi 6 编译，而移植用的内核是 KernelSU-Next v3.4.2（uapi 5）。
+/// 5→6 只是新增了 KSU_IOCTL_LOOKUP_SYMBOLS / KSU_GET_INFO_FLAG_PREINIT，既有结构体与命令完全一致，
+/// 所以低一档内核可以直接用：取「内核版本 与 自身版本」的较小值作为实际可用的 uapi，
+/// v6 专有的能力（符号查询、preinit）会按内核版本自行关闭。
+pub fn uapi_version() -> u32 {
+    let kernel_uapi = get_info().uapi_version;
+    if kernel_uapi == 0 {
+        return ksu_uapi::KERNEL_SU_UAPI_VERSION;
+    }
+    kernel_uapi.min(ksu_uapi::KERNEL_SU_UAPI_VERSION)
 }
 
 pub fn runtime_mode() -> &'static str {
@@ -288,8 +296,23 @@ pub fn runtime_mode() -> &'static str {
 
 pub fn ensure_uapi_version_matched() -> anyhow::Result<()> {
     let kernel_uapi = get_info().uapi_version;
-    let userspace_uapi = uapi_version();
-    if kernel_uapi != userspace_uapi {
+    let userspace_uapi = ksu_uapi::KERNEL_SU_UAPI_VERSION;
+    if kernel_uapi == 0 {
+        bail!("Cannot read kernel UAPI version: KSU_IOCTL_GET_INFO failed");
+    }
+    if kernel_uapi < userspace_uapi {
+        // 只容忍 uapi 5→6 这种纯加性差异，内核版本更低时照常跑，v6 独占功能由版本判断关闭
+        if userspace_uapi - kernel_uapi <= 1 {
+            log::warn!(
+                "kernel uapi {kernel_uapi} is lower than ksud {userspace_uapi}, continue in additive-compatible mode"
+            );
+            return Ok(());
+        }
+        bail!(
+            "UAPI version mismatch: kernel={kernel_uapi}, ksud={userspace_uapi}. Please update KernelSU!"
+        );
+    }
+    if kernel_uapi > userspace_uapi {
         bail!(
             "UAPI version mismatch: kernel={kernel_uapi}, ksud={userspace_uapi}. Please update KernelSU!"
         );
