@@ -433,11 +433,27 @@ pub fn mark_refresh() -> Result<()> {
 }
 
 pub fn nuke_ext4_sysfs(mnt: &str) -> anyhow::Result<()> {
+    // 内核端 nuke_ext4_sysfs 内部走 remove_proc_entry，重复 nuke 同一挂载点会空指针 panic
+    // (4.14 内核实测: Unable to handle kernel NULL pointer dereference / remove_proc_entry)。
+    // 软重启会重跑模块的 post-mount 脚本，这里保证同一挂载点在本次开机只真正 nuke 一次。
+    // 记录文件放在 /dev (tmpfs)，真重启自动清空，软重启则保留。
+    const STATE_FILE: &str = "/dev/.ksu_nuke_ext4_sysfs";
+    let done = fs::read_to_string(STATE_FILE).unwrap_or_default();
+    if done.lines().any(|line| line == mnt) {
+        log::info!("ext4 sysfs already nuked for {mnt}, skip");
+        return Ok(());
+    }
+
     let c_mnt = std::ffi::CString::new(mnt)?;
     let mut ioctl_cmd = ksu_uapi::ksu_nuke_ext4_sysfs_cmd {
         arg: c_mnt.as_ptr() as u64,
     };
     ksuctl(ksu_uapi::KSU_IOCTL_NUKE_EXT4_SYSFS, &raw mut ioctl_cmd)?;
+
+    let mut updated = done;
+    updated.push_str(mnt);
+    updated.push('\n');
+    let _ = fs::write(STATE_FILE, updated);
     Ok(())
 }
 

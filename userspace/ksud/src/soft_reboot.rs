@@ -148,6 +148,13 @@ fn wait_for_boot_completed() -> Result<()> {
     Ok(())
 }
 
+/// 软重启后屏幕常常停在熄灭态，看着像死机；开机完成后主动点亮一次
+fn wake_display() {
+    let _ = Command::new("/system/bin/input")
+        .args(["keyevent", "224"])
+        .status();
+}
+
 pub fn soft_reboot() -> Result<()> {
     // check it avoid user click "soft_reboot" in manager when version mismatch
     if let Err(e) = ksucalls::ensure_uapi_version_matched() {
@@ -215,6 +222,7 @@ pub fn soft_reboot() -> Result<()> {
         warn!("wait for boot completed failed: {e}");
     }
     on_boot_completed();
+    wake_display();
 
     unsafe {
         _exit(0);
