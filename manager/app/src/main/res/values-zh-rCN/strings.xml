@@ -1347,6 +1347,12 @@
     <string name="app_icon_empty_custom">还没有自定义图标</string>
     <string name="app_icon_empty_custom_summary">导入 ZIP 压缩包即可添加自己的图标</string>
     <string name="app_icon_builtin_zako">SukiSU 线稿</string>
+    <string name="app_icon_builtin_ailisi">爱丽丝</string>
+    <string name="app_icon_builtin_baizi">白子</string>
+    <string name="app_icon_builtin_juwang">橘望</string>
+    <string name="app_icon_builtin_kaiyi">凯伊</string>
+    <string name="app_icon_builtin_pulana">普拉娜</string>
+    <string name="app_icon_builtin_xianguo">SukiSU-Next 线稿</string>
     <string name="app_icon_dynamic_color_title">动态取色</string>
     <string name="app_icon_dynamic_color_summary">允许支持的桌面根据壁纸颜色调整图标（Android 13+）</string>
     <string name="app_icon_selected">当前</string>

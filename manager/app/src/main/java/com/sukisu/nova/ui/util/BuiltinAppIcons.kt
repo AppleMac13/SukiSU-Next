@@ -24,6 +24,12 @@ data class BuiltinAppIcon(
 object BuiltinAppIcons {
     const val DEFAULT_ID = "default"
     const val SUKISU_ID = "sukisu"
+    const val AILISI_ID = "ailisi"
+    const val BAIZI_ID = "baizi"
+    const val JUWANG_ID = "juwang"
+    const val KAIYI_ID = "kaiyi"
+    const val PULANA_ID = "pulana"
+    const val XIANGUO_ID = "xianguo"
 
     // 旧版内置图标 id：已从选择列表移除，仅用于识别历史设置与关闭遗留的启动别名。
     const val KERNELSU_ID = "kernelsu"
@@ -47,6 +53,48 @@ object BuiltinAppIcons {
             iconRes = R.mipmap.ic_launcher_sukisu,
             foregroundRes = R.mipmap.ic_launcher_sukisu,
             aliasClassName = mainActivityName + "AliasSukiSU",
+        ),
+        BuiltinAppIcon(
+            id = AILISI_ID,
+            nameRes = R.string.app_icon_builtin_ailisi,
+            iconRes = R.mipmap.ic_launcher_ailisi,
+            foregroundRes = R.mipmap.ic_launcher_ailisi,
+            aliasClassName = mainActivityName + "AliasAilisi",
+        ),
+        BuiltinAppIcon(
+            id = BAIZI_ID,
+            nameRes = R.string.app_icon_builtin_baizi,
+            iconRes = R.mipmap.ic_launcher_baizi,
+            foregroundRes = R.mipmap.ic_launcher_baizi,
+            aliasClassName = mainActivityName + "AliasBaizi",
+        ),
+        BuiltinAppIcon(
+            id = JUWANG_ID,
+            nameRes = R.string.app_icon_builtin_juwang,
+            iconRes = R.mipmap.ic_launcher_juwang,
+            foregroundRes = R.mipmap.ic_launcher_juwang,
+            aliasClassName = mainActivityName + "AliasJuwang",
+        ),
+        BuiltinAppIcon(
+            id = KAIYI_ID,
+            nameRes = R.string.app_icon_builtin_kaiyi,
+            iconRes = R.mipmap.ic_launcher_kaiyi,
+            foregroundRes = R.mipmap.ic_launcher_kaiyi,
+            aliasClassName = mainActivityName + "AliasKaiyi",
+        ),
+        BuiltinAppIcon(
+            id = PULANA_ID,
+            nameRes = R.string.app_icon_builtin_pulana,
+            iconRes = R.mipmap.ic_launcher_pulana,
+            foregroundRes = R.mipmap.ic_launcher_pulana,
+            aliasClassName = mainActivityName + "AliasPulana",
+        ),
+        BuiltinAppIcon(
+            id = XIANGUO_ID,
+            nameRes = R.string.app_icon_builtin_xianguo,
+            iconRes = R.mipmap.ic_launcher_xianguo,
+            foregroundRes = R.mipmap.ic_launcher_xianguo,
+            aliasClassName = mainActivityName + "AliasXianguo",
         ),
     )
 
@@ -156,6 +204,12 @@ object BuiltinAppIcons {
     private fun aliasSuffix(icon: BuiltinAppIcon): String = when (icon.id) {
         DEFAULT_ID -> "Default"
         SUKISU_ID -> "SukiSU"
+        AILISI_ID -> "Ailisi"
+        BAIZI_ID -> "Baizi"
+        JUWANG_ID -> "Juwang"
+        KAIYI_ID -> "Kaiyi"
+        PULANA_ID -> "Pulana"
+        XIANGUO_ID -> "Xianguo"
         KERNELSU_ID -> ""
         LOGO_ID -> "Logo"
         ZAKO_ID -> "Zako"
