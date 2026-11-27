@@ -1531,8 +1531,8 @@ fun setBuiltinZygiskConfig(key: String, value: String): Boolean {
 }
 
 fun getBuiltinZygiskStatus(): BuiltinZygiskStatus {
-    return runCatching {
-        val shell = getRootShell()
+    val shell = runCatching { getRootShell() }.getOrNull() ?: return BuiltinZygiskStatus()
+    runCatching {
         val out = ShellUtils.fastCmd(shell, "${getKsuDaemonPath()} zygisk status").trim()
         val json = org.json.JSONObject(out)
         val daemons = json.optJSONArray("daemons")?.let { array ->
@@ -1550,7 +1550,7 @@ fun getBuiltinZygiskStatus(): BuiltinZygiskStatus {
                 }
             }
         }.orEmpty()
-        BuiltinZygiskStatus(
+        return BuiltinZygiskStatus(
             enabled = json.optBoolean("enabled", false),
             monitorRunning = json.optBoolean("monitor_running", false),
             daemonRunning = json.optBoolean("daemon_running", false),
@@ -1561,7 +1561,20 @@ fun getBuiltinZygiskStatus(): BuiltinZygiskStatus {
             daemons = daemons,
             version = json.optString("version", ""),
         )
-    }.getOrDefault(BuiltinZygiskStatus())
+    }
+    // Same fallback as the implementation info: ask the provider module itself.
+    val impl = getModuleZygiskImplementation(shell)
+    if (impl.id.isBlank()) return BuiltinZygiskStatus()
+    val running = impl.state == "running"
+    return BuiltinZygiskStatus(
+        enabled = impl.state != "disabled",
+        monitorRunning = running,
+        daemonRunning = running,
+        zygoteInjected = running,
+        fullyActive = running,
+        zygotes = listOf(ZygoteAbiStatus(abi = "arm64-v8a", status = impl.state)),
+        version = impl.version,
+    )
 }
 
 private fun org.json.JSONObject.toZygiskProcess(): ZygiskProcess =
@@ -1703,17 +1716,70 @@ data class ZygiskImplementationInfo(
 
 /// The Zygisk implementation ksud reports, including its built-in one. Reading this is
 /// independent of the module list, which only describes what is on disk.
+///
+/// This kernel's ksud has no `zygisk` subgroup at all, so a standalone provider such as
+/// Zygisk Next has to be recognised from its own module directory and controller instead.
 fun getZygiskImplementationInfo(): ZygiskImplementationInfo {
-    return runCatching {
-        val shell = getRootShell()
+    val shell = runCatching { getRootShell() }.getOrNull()
+        ?: return ZygiskImplementationInfo()
+    runCatching {
         val out = ShellUtils.fastCmd(shell, "${getKsuDaemonPath()} zygisk info").trim()
         val json = org.json.JSONObject(out)
-        ZygiskImplementationInfo(
+        return ZygiskImplementationInfo(
             state = json.optString("state", "none"),
             id = json.optString("id", ""),
             name = json.optString("name", ""),
             version = json.optString("version", ""),
             providers = json.optJSONArray("providers").toStringList(),
         )
-    }.getOrDefault(ZygiskImplementationInfo())
+    }
+    return getModuleZygiskImplementation(shell)
 }
+
+private const val MODULES_DIR = "/data/adb/modules"
+
+/// Standalone Zygisk providers install as ordinary modules. Their identity and state come
+/// straight from `ksud module list`, which is a single ksud call - reading /data/adb by hand
+/// needs a shell that this root shell does not reliably provide.
+private fun getModuleZygiskImplementation(shell: Shell): ZygiskImplementationInfo {
+    // Same job shape as listModules(): fastCmd() hands back a single line, which truncates the
+    // JSON of a multi-module list.
+    val raw = runCatching {
+        shell.newJob().add("${getKsuDaemonPath()} module list").to(ArrayList(), null).exec().out
+            .joinToString("\n")
+    }.getOrNull().orEmpty()
+    val modules = runCatching { org.json.JSONArray(raw) }.getOrNull()
+        ?: return ZygiskImplementationInfo()
+
+    val providers = mutableListOf<String>()
+    var provider: org.json.JSONObject? = null
+    for (i in 0 until modules.length()) {
+        val item = modules.optJSONObject(i) ?: continue
+        val id = item.optString("id")
+        val name = item.optString("name")
+        val isProvider = id == "zygisksu" || name.contains("Zygisk Next", ignoreCase = true)
+        if (!isProvider) continue
+        providers.add(id)
+        if (provider == null) provider = item
+    }
+    val item = provider ?: return ZygiskImplementationInfo()
+
+    // ksud serialises every field as a string; "remove" wins over "enabled" because a removed
+    // module is gone at next boot regardless of its flag.
+    val state = when {
+        item.optString("remove") == "true" -> "none"
+        item.optString("enabled") != "true" -> "disabled"
+        item.optString("update") == "true" -> "reboot"
+        else -> "running"
+    }
+    return ZygiskImplementationInfo(
+        state = state,
+        id = item.optString("id"),
+        name = item.optString("name").ifBlank { "Zygisk Next" },
+        version = item.optString("version"),
+        providers = providers,
+    )
+}
+
+private fun String.lineValue(key: String): String =
+    lines().firstOrNull { it.startsWith("$key=") }?.substringAfter('=')?.trim().orEmpty()
