@@ -44,8 +44,8 @@ object BuiltinAppIcons {
         BuiltinAppIcon(
             id = SUKISU_ID,
             nameRes = R.string.app_icon_builtin_sukisu,
-            iconRes = R.mipmap.ic_launcher,
-            foregroundRes = R.mipmap.ic_launcher_fore,
+            iconRes = R.mipmap.ic_launcher_sukisu,
+            foregroundRes = R.mipmap.ic_launcher_sukisu,
             aliasClassName = mainActivityName + "AliasSukiSU",
         ),
     )
