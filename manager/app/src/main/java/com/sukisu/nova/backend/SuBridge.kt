@@ -45,7 +45,13 @@ object SuBridge {
             return false
         }
 
-        val lib = File(context.applicationInfo.nativeLibraryDir, "libksud.so")
+        // The kernel-side commands (module install, soft reboot, ...) are served
+        // by the binary the kernel itself installed, which has no `proxy` subcommand.
+        // Keep that one as libksud.so and ship a second copy built from this
+        // tree purely as the bridge helper.
+        val bridge = File(context.applicationInfo.nativeLibraryDir, "libksubridge.so")
+        val lib = if (bridge.exists()) bridge
+        else File(context.applicationInfo.nativeLibraryDir, "libksud.so")
         if (!lib.exists()) {
             Log.w(TAG, "bundled ksud missing at $lib")
             return false
