@@ -1,6 +1,6 @@
 {
-  "versionName": "0.1.4",
+  "versionName": "0.1.5",
   "versionCode": 30997,
-  "downloadUrl": "https://applemac13.github.io/SukiSU-Next/apks/SukiSU-Next_0.1.4_30997-release.apk",
-  "changelog": "检查更新与 APK 下载改走 GitHub Pages"
+  "downloadUrl": "https://applemac13.github.io/SukiSU-Next/apks/SukiSU-Next_0.1.5_30997-release.apk",
+  "changelog": "超级用户列表扫描加了 25 秒超时，卡死的刷新会超时后丢弃并重新扫描；KsuService 绑定加了 8 秒超时，不再永久停在「正在刷新…」和「已授权 0/0」。"
 }
