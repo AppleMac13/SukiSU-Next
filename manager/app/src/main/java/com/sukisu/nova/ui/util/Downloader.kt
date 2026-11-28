@@ -53,51 +53,45 @@ internal suspend fun isDownloadAvailable(uri: Uri): Boolean = withContext(Dispat
 }
 
 
-// This fork is published on GitHub, so the release check reads its own repository instead of
-// the upstream GitLab. Every build shares one versionCode, so the tag name is what counts.
-private const val GITHUB_RELEASE_API =
-    "https://api.github.com/repos/AppleMac13/SukiSU-Next/releases/latest"
+// The release feed is a static file on GitHub Pages. Every build shares one versionCode, so the
+// version name in the feed is what counts.
+private const val UPDATE_JSON_URL =
+    "https://applemac13.github.io/SukiSU-Next/update.json"
 private const val GITHUB_DOWNLOAD_PREFIX =
     "https://github.com/AppleMac13/SukiSU-Next/releases/download/"
 
-fun checkNewVersion(): LatestVersionInfo = checkGithubRelease()
+fun checkNewVersion(): LatestVersionInfo = checkUpdateJson()
 
-private fun checkGithubRelease(): LatestVersionInfo {
+private fun checkUpdateJson(): LatestVersionInfo {
     if (!isNetworkAvailable(ksuApp)) return LatestVersionInfo()
     return runCatching {
         ksuApp.okhttpClient.newCall(
             Request.Builder()
-                .url(GITHUB_RELEASE_API)
-                .header("Accept", "application/vnd.github+json")
+                .url("$UPDATE_JSON_URL?t=${System.currentTimeMillis()}")
                 .header("Cache-Control", "no-store")
                 .build()
         ).execute().use { response ->
             if (!response.isSuccessful) {
-                android.util.Log.w("UpdateCheck", "github: HTTP ${response.code}")
+                android.util.Log.w("UpdateCheck", "update.json: HTTP ${response.code}")
                 return LatestVersionInfo()
             }
             val json = org.json.JSONObject(response.body.string())
-            val versionName = json.optString("tag_name").trim().removePrefix("v")
+            val versionName = json.optString("versionName").trim().removePrefix("v")
             if (versionName.isEmpty()) return LatestVersionInfo()
-            val assets = json.optJSONArray("assets") ?: return LatestVersionInfo()
-            val apk = (0 until assets.length()).asSequence()
-                .mapNotNull { assets.optJSONObject(it) }
-                .firstOrNull {
-                    it.optString("name").endsWith("-release.apk") &&
-                        it.optString("browser_download_url").startsWith(GITHUB_DOWNLOAD_PREFIX)
-                } ?: run {
-                android.util.Log.w("UpdateCheck", "github: no release APK for $versionName")
+            val downloadUrl = json.optString("downloadUrl").trim()
+            if (!downloadUrl.startsWith(GITHUB_DOWNLOAD_PREFIX)) {
+                android.util.Log.w("UpdateCheck", "update.json: unexpected url for $versionName")
                 return LatestVersionInfo()
             }
             LatestVersionInfo(
-                versionCode = 0L,
-                downloadUrl = apk.optString("browser_download_url"),
-                changelog = json.optString("body"),
+                versionCode = json.optLong("versionCode", 0L),
+                downloadUrl = downloadUrl,
+                changelog = json.optString("changelog"),
                 versionName = versionName,
             )
         }
     }.onFailure {
-        android.util.Log.w("UpdateCheck", "github: update check failed", it)
+        android.util.Log.w("UpdateCheck", "update.json: update check failed", it)
     }.getOrDefault(LatestVersionInfo())
 }
 
