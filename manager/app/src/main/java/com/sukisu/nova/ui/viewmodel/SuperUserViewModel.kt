@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import com.sukisu.nova.Natives
 import com.sukisu.nova.data.repository.SettingsRepository
 import com.sukisu.nova.data.repository.SettingsRepositoryImpl
@@ -96,6 +97,7 @@ class SuperUserViewModel(
 
     companion object {
         private const val TAG = "SuperUserViewModel"
+        private const val APP_SCAN_TIMEOUT_MILLIS = 25_000L
 
         private val appsLock = Any()
         private var cachedApps: List<AppInfo> = emptyList()
@@ -127,7 +129,17 @@ class SuperUserViewModel(
                         .onFailure { Log.e(TAG, "loadApps failed", it) }
                 }.also { appListScan = it }
             }
-            return scan.await()
+            // A scan that never finishes must not pin the screen on "refreshing" and
+            // must not be joined by every later attempt: drop it and let the next
+            // refresh start clean.
+            return withTimeoutOrNull(APP_SCAN_TIMEOUT_MILLIS) { scan.await() } ?: run {
+                synchronized(appsLock) {
+                    if (appListScan === scan) appListScan = null
+                }
+                scan.cancel()
+                Log.e(TAG, "loadApps timed out after ${APP_SCAN_TIMEOUT_MILLIS}ms, discarding the stalled scan")
+                Result.failure(IllegalStateException("app list scan timed out"))
+            }
         }
 
         @JvmStatic

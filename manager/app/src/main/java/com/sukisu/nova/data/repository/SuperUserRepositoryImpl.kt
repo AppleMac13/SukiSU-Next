@@ -22,6 +22,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import com.sukisu.zako.IKsuInterface
 import com.sukisu.nova.Natives
 import com.sukisu.nova.data.model.AppInfo
@@ -37,6 +38,7 @@ class SuperUserRepositoryImpl : SuperUserRepository {
 
     companion object {
         private const val TAG = "SuperUserRepository"
+        private const val KSU_CONNECT_TIMEOUT_MS = 8_000L
         private val scanMutex = Mutex()
         private val packageGeneration = MutableStateFlow(0L)
         private var cachedScan: AppScan? = null
@@ -174,6 +176,10 @@ class SuperUserRepositoryImpl : SuperUserRepository {
     private suspend inline fun connectKsuService(
         crossinline onDisconnect: () -> Unit = {}
     ): Pair<IBinder, ServiceConnection> = withContext(Dispatchers.Main) {
+        // A bind that never reports back used to park the coroutine forever: the
+        // scan never returned, the caller stayed on "refreshing" and every later
+        // attempt joined the same dead job until the process was restarted.
+        withTimeoutOrNull(KSU_CONNECT_TIMEOUT_MS) {
         suspendCancellableCoroutine { cont ->
             val connection = object : ServiceConnection {
                 override fun onServiceDisconnected(name: ComponentName?) {
@@ -207,5 +213,6 @@ class SuperUserRepositoryImpl : SuperUserRepository {
             val shell = KsuCli.SHELL
             task?.let { shell.execTask(it) }
         }
+        } ?: throw IllegalStateException("KsuService binding timed out after ${KSU_CONNECT_TIMEOUT_MS}ms")
     }
 }
