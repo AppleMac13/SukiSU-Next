@@ -1,6 +1,6 @@
 {
-  "versionName": "0.1.9",
+  "versionName": "0.2.0",
   "versionCode": 30997,
-  "downloadUrl": "https://applemac13.github.io/SukiSU-Next/apks/SukiSU-Next_0.1.9_30997-release.apk",
-  "changelog": "更新包改成 8 路 Range 并发下载，单连接被限速时总带宽提升约 9 倍。"
+  "downloadUrl": "https://applemac13.github.io/SukiSU-Next/apks/SukiSU-Next_0.2.0_30997-release.apk",
+  "changelog": "并发下载加了连接超时和分块断点续传重试，单条连接挂住不再让整包卡死。"
 }
