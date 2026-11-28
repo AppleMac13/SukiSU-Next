@@ -1,6 +1,6 @@
 {
-  "versionName": "0.2.8",
+  "versionName": "0.2.7",
   "versionCode": 30997,
   "downloadUrl": "https://applemac13.github.io/SukiSU-Next/apks/SukiSU-Next_0.2.7_30997-release.apk",
-  "changelog": "测速靶：强制 HTTP/1.1。"
+  "changelog": "下载改用 HTTP/1.1 独占连接，不再被单条 HTTP/2 连接限速拖死。"
 }
