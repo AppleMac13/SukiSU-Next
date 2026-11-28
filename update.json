@@ -1,6 +1,6 @@
 {
-  "versionName": "0.2.0",
+  "versionName": "0.2.1",
   "versionCode": 30997,
-  "downloadUrl": "https://applemac13.github.io/SukiSU-Next/apks/SukiSU-Next_0.2.0_30997-release.apk",
-  "changelog": "并发下载加了连接超时和分块断点续传重试，单条连接挂住不再让整包卡死。"
+  "downloadUrl": "https://applemac13.github.io/SukiSU-Next/apks/SukiSU-Next_0.2.1_30997-release.apk",
+  "changelog": "更新下载改成 64 路并发分块，加了低速看门狗，掉速连接取消后剩余字节重新排队。"
 }
