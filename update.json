@@ -1,0 +1,6 @@
+{
+  "versionName": "0.1.2",
+  "versionCode": 30997,
+  "downloadUrl": "https://github.com/AppleMac13/SukiSU-Next/releases/download/v0.1.2/SukiSU-Next_0.1.2_30997-release.apk",
+  "changelog": "修复检查更新可能读到缓存的问题"
+}
