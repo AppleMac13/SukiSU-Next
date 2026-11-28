@@ -1,6 +1,6 @@
 {
-  "versionName": "0.1.6",
+  "versionName": "0.1.7",
   "versionCode": 30997,
-  "downloadUrl": "https://applemac13.github.io/SukiSU-Next/apks/SukiSU-Next_0.1.6_30997-release.apk",
+  "downloadUrl": "https://applemac13.github.io/SukiSU-Next/apks/SukiSU-Next_0.1.7_30997-release.apk",
   "changelog": "更新下载显示进度条，root 静默安装后自动重启应用。"
 }
