@@ -1,6 +1,6 @@
 {
-  "versionName": "0.2.5",
+  "versionName": "0.2.6",
   "versionCode": 30997,
   "downloadUrl": "https://applemac13.github.io/SukiSU-Next/apks/SukiSU-Next_0.2.5_30997-release.apk",
-  "changelog": "并行下载整队停滞 20 秒时中止并改用单连接补齐缺口。"
+  "changelog": "测速靶：停滞中止 + 单连接补齐。"
 }
