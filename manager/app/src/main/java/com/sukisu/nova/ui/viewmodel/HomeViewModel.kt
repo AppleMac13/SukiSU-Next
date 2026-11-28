@@ -48,6 +48,7 @@ import com.sukisu.nova.ui.screen.home.getManagerVersion
 import com.sukisu.nova.ui.util.checkNewCiVersion
 import com.sukisu.nova.ui.screen.home.formatZygiskImplementation
 import com.sukisu.nova.ui.util.checkNewVersion
+import com.sukisu.nova.ui.util.module.isNewerVersionName
 import com.sukisu.nova.ui.util.getKpmModuleCount
 import com.sukisu.nova.ui.util.getKpmVersion
 import com.sukisu.nova.ui.util.getSuperuserCount
@@ -209,7 +210,12 @@ class HomeViewModel(
     private fun installUpdate(isCi: Boolean) {
         val content = _uiState.value.content ?: return
         val info = if (isCi) content.ciLatestVersionInfo else content.latestVersionInfo
-        if (info.versionCode <= content.currentManagerVersionCode || info.downloadUrl.isBlank()) return
+        val isNewer = if (info.versionName.isNotBlank()) {
+            isNewerVersionName(info.versionName, content.currentManagerVersionName)
+        } else {
+            info.versionCode > content.currentManagerVersionCode
+        }
+        if (!isNewer || info.downloadUrl.isBlank()) return
         if (!settingsRepo.checkUpdate || (isCi && !settingsRepo.checkCiUpdate) || content.ciUpdateBusy) return
         updateContent { it.copy(ciUpdateBusy = true) }
         viewModelScope.launch {
@@ -329,6 +335,7 @@ class HomeViewModel(
                 .getBoolean("hide_home_warnings", false),
             latestVersionInfo = LatestVersionInfo(),
             currentManagerVersionCode = managerVersion.versionCode,
+            currentManagerVersionName = managerVersion.versionName,
             systemInfo = SystemInfo(
                 kernelVersion = Os.uname().release,
                 managerVersion = "${managerVersion.versionName} (${managerVersion.versionCode}-${managerUAPIVersion})",

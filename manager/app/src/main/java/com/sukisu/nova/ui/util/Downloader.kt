@@ -53,7 +53,53 @@ internal suspend fun isDownloadAvailable(uri: Uri): Boolean = withContext(Dispat
 }
 
 
-fun checkNewVersion(): LatestVersionInfo = checkReleaseVersion("latest", isCi = false)
+// This fork is published on GitHub, so the release check reads its own repository instead of
+// the upstream GitLab. Every build shares one versionCode, so the tag name is what counts.
+private const val GITHUB_RELEASE_API =
+    "https://api.github.com/repos/AppleMac13/SukiSU-Next/releases/latest"
+private const val GITHUB_DOWNLOAD_PREFIX =
+    "https://github.com/AppleMac13/SukiSU-Next/releases/download/"
+
+fun checkNewVersion(): LatestVersionInfo = checkGithubRelease()
+
+private fun checkGithubRelease(): LatestVersionInfo {
+    if (!isNetworkAvailable(ksuApp)) return LatestVersionInfo()
+    return runCatching {
+        ksuApp.okhttpClient.newCall(
+            Request.Builder()
+                .url(GITHUB_RELEASE_API)
+                .header("Accept", "application/vnd.github+json")
+                .header("Cache-Control", "no-store")
+                .build()
+        ).execute().use { response ->
+            if (!response.isSuccessful) {
+                android.util.Log.w("UpdateCheck", "github: HTTP ${response.code}")
+                return LatestVersionInfo()
+            }
+            val json = org.json.JSONObject(response.body.string())
+            val versionName = json.optString("tag_name").trim().removePrefix("v")
+            if (versionName.isEmpty()) return LatestVersionInfo()
+            val assets = json.optJSONArray("assets") ?: return LatestVersionInfo()
+            val apk = (0 until assets.length()).asSequence()
+                .mapNotNull { assets.optJSONObject(it) }
+                .firstOrNull {
+                    it.optString("name").endsWith("-release.apk") &&
+                        it.optString("browser_download_url").startsWith(GITHUB_DOWNLOAD_PREFIX)
+                } ?: run {
+                android.util.Log.w("UpdateCheck", "github: no release APK for $versionName")
+                return LatestVersionInfo()
+            }
+            LatestVersionInfo(
+                versionCode = 0L,
+                downloadUrl = apk.optString("browser_download_url"),
+                changelog = json.optString("body"),
+                versionName = versionName,
+            )
+        }
+    }.onFailure {
+        android.util.Log.w("UpdateCheck", "github: update check failed", it)
+    }.getOrDefault(LatestVersionInfo())
+}
 
 fun checkNewCiVersion(): LatestVersionInfo = checkReleaseVersion("tags/manager-ci", isCi = true)
 

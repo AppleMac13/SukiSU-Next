@@ -16,6 +16,7 @@ import com.sukisu.nova.BuildConfig
 import com.sukisu.nova.R
 import com.sukisu.nova.ksuApp
 import com.sukisu.nova.ui.util.module.LatestVersionInfo
+import com.sukisu.nova.ui.util.module.isNewerVersionName
 import com.sukisu.nova.ui.util.getRootShell
 import com.sukisu.nova.ui.util.shellQuote
 import com.sukisu.nova.ui.util.withNewRootShell
@@ -32,7 +33,7 @@ class CiManagerUpdater(private val context: Context) {
      * writes the APK to Downloads, so nothing is left behind after the update.
      */
     fun updateAndInstall(update: LatestVersionInfo, keepApk: Boolean = true): Boolean {
-        if (!update.downloadUrl.startsWith(RELEASE_ASSET_PREFIX)) {
+        if (RELEASE_ASSET_PREFIXES.none { update.downloadUrl.startsWith(it) }) {
             throw IOException(context.getString(R.string.ci_update_request_failed))
         }
         val abi = Build.SUPPORTED_ABIS.firstOrNull()?.takeIf { it in SUPPORTED_ABIS }
@@ -40,7 +41,7 @@ class CiManagerUpdater(private val context: Context) {
         val apk = File.createTempFile("manager-ci-", ".apk", context.cacheDir)
         try {
             download(update.downloadUrl, apk)
-            verifyApk(apk, abi, update.versionCode)
+            verifyApk(apk, abi, update)
             if (keepApk) {
                 saveToDownloads(apk, update.downloadUrl)
             }
@@ -141,12 +142,10 @@ class CiManagerUpdater(private val context: Context) {
         }
     }
 
-    private fun verifyApk(apk: File, abi: String, expectedVersionCode: Long) {
+    private fun verifyApk(apk: File, abi: String, update: LatestVersionInfo) {
         val candidate = archivePackageInfo(apk)
             ?: throw IOException(context.getString(R.string.ci_update_invalid_apk))
-        if (candidate.packageName != BuildConfig.APPLICATION_ID ||
-            candidate.longVersionCodeCompat() != expectedVersionCode ||
-            abi !in apkAbis(apk)) {
+        if (candidate.packageName != BuildConfig.APPLICATION_ID || abi !in apkAbis(apk)) {
             throw IOException(context.getString(R.string.ci_update_invalid_apk))
         }
         val installed = try {
@@ -154,8 +153,21 @@ class CiManagerUpdater(private val context: Context) {
         } catch (e: Exception) {
             throw IOException(context.getString(R.string.ci_update_invalid_apk), e)
         }
-        if (candidate.longVersionCodeCompat() <= installed.longVersionCodeCompat()) {
-            throw IOException(context.getString(R.string.ci_update_not_newer))
+        // Our builds all carry the same versionCode, so when the release provides a version name
+        // the comparison has to follow that instead.
+        if (update.versionName.isNotBlank()) {
+            if (candidate.versionName != update.versionName ||
+                !isNewerVersionName(candidate.versionName.orEmpty(), installed.versionName.orEmpty())
+            ) {
+                throw IOException(context.getString(R.string.ci_update_not_newer))
+            }
+        } else {
+            if (candidate.longVersionCodeCompat() != update.versionCode) {
+                throw IOException(context.getString(R.string.ci_update_invalid_apk))
+            }
+            if (candidate.longVersionCodeCompat() <= installed.longVersionCodeCompat()) {
+                throw IOException(context.getString(R.string.ci_update_not_newer))
+            }
         }
         if (!sameSignature(candidate, installed)) {
             throw IOException(context.getString(R.string.ci_update_signature_mismatch))
@@ -242,8 +254,10 @@ class CiManagerUpdater(private val context: Context) {
     }
 
     companion object {
-        private const val RELEASE_ASSET_PREFIX =
-            "https://git.zako.shirkneko.top:20004/shirkneko/SukiSU/releases/download/"
+        private val RELEASE_ASSET_PREFIXES = listOf(
+            "https://github.com/AppleMac13/SukiSU-Next/releases/download/",
+            "https://git.zako.shirkneko.top:20004/shirkneko/SukiSU/releases/download/",
+        )
         private const val MAX_APK_BYTES = 512L * 1024 * 1024
         private val SUPPORTED_ABIS = setOf("arm64-v8a", "armeabi-v7a", "x86_64", "riscv64")
     }

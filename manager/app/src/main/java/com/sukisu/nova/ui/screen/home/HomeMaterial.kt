@@ -217,7 +217,10 @@ private fun UpdateCard(
     ) {
         val updateDialog = rememberConfirmDialog(onConfirm = { actions.onReleaseUpdateClick() })
         WarningCard(
-            message = customText(CustomTextKey.HOME_UPDATE_NEW_VERSION, newVersion.versionCode),
+            message = customText(
+                CustomTextKey.HOME_UPDATE_NEW_VERSION,
+                newVersion.versionName.ifBlank { newVersion.versionCode.toString() },
+            ),
             level = WarningLevel.Notice
         ) {
             if (state.ciUpdateBusy) return@WarningCard

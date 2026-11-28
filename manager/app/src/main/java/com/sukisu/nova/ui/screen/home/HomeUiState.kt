@@ -7,6 +7,7 @@ import com.sukisu.nova.ui.util.HomeCardImageStyle
 import com.sukisu.nova.ui.util.HomeLayout
 import com.sukisu.nova.ui.util.HomeStatusAlignment
 import com.sukisu.nova.ui.util.module.LatestVersionInfo
+import com.sukisu.nova.ui.util.module.isNewerVersionName
 
 @Immutable
 data class HomeLoadState(
@@ -34,6 +35,7 @@ data class HomeUiState(
     val checkUpdateEnabled: Boolean,
     val latestVersionInfo: LatestVersionInfo,
     val currentManagerVersionCode: Long,
+    val currentManagerVersionName: String = "",
     val systemInfo: SystemInfo,
     val checkCiUpdateEnabled: Boolean = false,
     val ciLatestVersionInfo: LatestVersionInfo = LatestVersionInfo(),
@@ -124,7 +126,11 @@ data class HomeUiState(
         get() = isManager && !isManagerPrBuild && isKernelPrBuild
 
     val hasUpdate: Boolean
-        get() = latestVersionInfo.versionCode > currentManagerVersionCode
+        get() = if (latestVersionInfo.versionName.isNotBlank()) {
+            isNewerVersionName(latestVersionInfo.versionName, currentManagerVersionName)
+        } else {
+            latestVersionInfo.versionCode > currentManagerVersionCode
+        }
 }
 
 @Immutable

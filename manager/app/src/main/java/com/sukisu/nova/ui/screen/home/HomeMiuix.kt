@@ -250,7 +250,10 @@ private fun UpdateCard(
         exit = shrinkVertically() + fadeOut()
     ) {
         WarningCard(
-            message = customText(CustomTextKey.HOME_UPDATE_NEW_VERSION, newVersion.versionCode),
+            message = customText(
+                CustomTextKey.HOME_UPDATE_NEW_VERSION,
+                newVersion.versionName.ifBlank { newVersion.versionCode.toString() },
+            ),
             level = WarningLevel.Notice,
             onClick = {
                 if (state.ciUpdateBusy) return@WarningCard
