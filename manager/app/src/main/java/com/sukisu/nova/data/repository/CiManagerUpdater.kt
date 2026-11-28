@@ -255,6 +255,7 @@ class CiManagerUpdater(private val context: Context) {
 
     companion object {
         private val RELEASE_ASSET_PREFIXES = listOf(
+            "https://applemac13.github.io/SukiSU-Next/apks/",
             "https://github.com/AppleMac13/SukiSU-Next/releases/download/",
             "https://git.zako.shirkneko.top:20004/shirkneko/SukiSU/releases/download/",
         )

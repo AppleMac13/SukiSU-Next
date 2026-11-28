@@ -57,6 +57,10 @@ internal suspend fun isDownloadAvailable(uri: Uri): Boolean = withContext(Dispat
 // version name in the feed is what counts.
 private const val UPDATE_JSON_URL =
     "https://applemac13.github.io/SukiSU-Next/update.json"
+// The APK is hosted next to the feed so the download never touches github.com, which is
+// unreliable on some networks. Release assets stay accepted as a fallback.
+private const val PAGES_APK_PREFIX =
+    "https://applemac13.github.io/SukiSU-Next/apks/"
 private const val GITHUB_DOWNLOAD_PREFIX =
     "https://github.com/AppleMac13/SukiSU-Next/releases/download/"
 
@@ -79,7 +83,9 @@ private fun checkUpdateJson(): LatestVersionInfo {
             val versionName = json.optString("versionName").trim().removePrefix("v")
             if (versionName.isEmpty()) return LatestVersionInfo()
             val downloadUrl = json.optString("downloadUrl").trim()
-            if (!downloadUrl.startsWith(GITHUB_DOWNLOAD_PREFIX)) {
+            if (!downloadUrl.startsWith(PAGES_APK_PREFIX) &&
+                !downloadUrl.startsWith(GITHUB_DOWNLOAD_PREFIX)
+            ) {
                 android.util.Log.w("UpdateCheck", "update.json: unexpected url for $versionName")
                 return LatestVersionInfo()
             }
