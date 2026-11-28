@@ -1,6 +1,6 @@
 {
-  "versionName": "0.2.1",
+  "versionName": "0.2.0",
   "versionCode": 30997,
   "downloadUrl": "https://applemac13.github.io/SukiSU-Next/apks/SukiSU-Next_0.2.0_30997-release.apk",
-  "changelog": "下载链路测试：用与已装版本相同的包验证并发下载。"
+  "changelog": "并发下载加了连接超时和分块断点续传重试，单条连接挂住不再让整包卡死。"
 }
