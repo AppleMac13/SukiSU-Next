@@ -1,6 +1,6 @@
 {
-  "versionName": "0.2.4",
+  "versionName": "0.2.5",
   "versionCode": 30997,
   "downloadUrl": "https://applemac13.github.io/SukiSU-Next/apks/SukiSU-Next_0.2.4_30997-release.apk",
-  "changelog": "下载并发降到 16 路，并行结束后按 512KB 块补齐缺口，尾部改用单连接顺序续传。"
+  "changelog": "测速靶：16 路 + 缺口单连接补齐。"
 }
