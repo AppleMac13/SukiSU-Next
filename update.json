@@ -1,6 +1,6 @@
 {
-  "versionName": "0.2.7",
+  "versionName": "0.2.8",
   "versionCode": 30997,
-  "downloadUrl": "https://applemac13.github.io/SukiSU-Next/apks/SukiSU-Next_0.2.6_30997-release.apk",
-  "changelog": "测速靶：16 路 + 8 路低速补齐。"
+  "downloadUrl": "https://applemac13.github.io/SukiSU-Next/apks/SukiSU-Next_0.2.7_30997-release.apk",
+  "changelog": "测速靶：强制 HTTP/1.1。"
 }
