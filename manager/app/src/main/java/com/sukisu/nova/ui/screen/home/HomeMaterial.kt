@@ -37,6 +37,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import com.sukisu.nova.ui.component.Storefront
 import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -216,22 +217,32 @@ private fun UpdateCard(
         exit = shrinkVertically() + fadeOut()
     ) {
         val updateDialog = rememberConfirmDialog(onConfirm = { actions.onReleaseUpdateClick() })
-        WarningCard(
-            message = customText(
-                CustomTextKey.HOME_UPDATE_NEW_VERSION,
-                newVersion.versionName.ifBlank { newVersion.versionCode.toString() },
-            ),
-            level = WarningLevel.Notice
-        ) {
-            if (state.ciUpdateBusy) return@WarningCard
-            if (newVersion.changelog.isEmpty()) {
-                actions.onReleaseUpdateClick()
-            } else {
-                updateDialog.showConfirm(
-                    title = title,
-                    content = newVersion.changelog,
-                    markdown = true,
-                    confirm = updateText
+        Column(modifier = Modifier.fillMaxWidth()) {
+            WarningCard(
+                message = customText(
+                    CustomTextKey.HOME_UPDATE_NEW_VERSION,
+                    newVersion.versionName.ifBlank { newVersion.versionCode.toString() },
+                ),
+                level = WarningLevel.Notice
+            ) {
+                if (state.ciUpdateBusy) return@WarningCard
+                if (newVersion.changelog.isEmpty()) {
+                    actions.onReleaseUpdateClick()
+                } else {
+                    updateDialog.showConfirm(
+                        title = title,
+                        content = newVersion.changelog,
+                        markdown = true,
+                        confirm = updateText
+                    )
+                }
+            }
+            val progress = state.updateDownloadProgress
+            if (progress != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         }

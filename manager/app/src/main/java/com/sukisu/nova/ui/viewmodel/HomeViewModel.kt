@@ -1,8 +1,15 @@
 package com.sukisu.nova.ui.viewmodel
 
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.os.Process
+import android.os.SystemClock
 import android.system.Os
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -217,26 +224,53 @@ class HomeViewModel(
         }
         if (!isNewer || info.downloadUrl.isBlank()) return
         if (!settingsRepo.checkUpdate || (isCi && !settingsRepo.checkCiUpdate) || content.ciUpdateBusy) return
-        updateContent { it.copy(ciUpdateBusy = true) }
+        updateContent { it.copy(ciUpdateBusy = true, updateDownloadProgress = 0f) }
         viewModelScope.launch {
             try {
                 val installed = withContext(Dispatchers.IO) {
                     CiManagerUpdater(ksuApp).updateAndInstall(
                         info,
                         keepApk = !settingsRepo.autoDeleteUpdateApk,
+                        onProgress = { percent ->
+                            updateContent { it.copy(updateDownloadProgress = percent) }
+                        },
                     )
                 }
-                val message = if (installed) R.string.ci_update_install_success
-                    else R.string.ci_update_install_submitted
-                android.widget.Toast.makeText(ksuApp, message, android.widget.Toast.LENGTH_LONG).show()
+                updateContent { it.copy(updateDownloadProgress = null) }
+                if (installed) {
+                    android.widget.Toast.makeText(ksuApp, R.string.ci_update_install_success, android.widget.Toast.LENGTH_LONG).show()
+                    relaunchAfterInstall()
+                } else {
+                    android.widget.Toast.makeText(ksuApp, R.string.ci_update_install_submitted, android.widget.Toast.LENGTH_LONG).show()
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 android.widget.Toast.makeText(ksuApp, e.message ?: ksuApp.getString(R.string.ci_update_download_failed), android.widget.Toast.LENGTH_LONG).show()
             } finally {
-                updateContent { it.copy(ciUpdateBusy = false) }
+                updateContent { it.copy(ciUpdateBusy = false, updateDownloadProgress = null) }
             }
         }
+    }
+
+    /**
+     * The silent root install replaces the APK on disk, but this process keeps the
+     * old code in memory, so the home card would still report the previous version.
+     * Arm an alarm to reopen the app and then drop the process: the pending launch
+     * lives in the system server, so it survives our death and starts the new APK.
+     */
+    private fun relaunchAfterInstall() {
+        val launch = ksuApp.packageManager.getLaunchIntentForPackage(ksuApp.packageName) ?: return
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        val pending = PendingIntent.getActivity(
+            ksuApp,
+            0,
+            launch,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val alarm = ksuApp.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+        alarm?.set(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + 1_000L, pending)
+        Handler(Looper.getMainLooper()).postDelayed({ Process.killProcess(Process.myPid()) }, 300L)
     }
 
     private fun loadCounts(lkmMode: Boolean?, preview: Boolean, modulesJson: String?): Triple<Int?, Int?, Int?> {

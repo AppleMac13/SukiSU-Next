@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sukisu.nova.KernelVersion
 import com.sukisu.nova.Natives
+import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import com.sukisu.nova.R
 import com.sukisu.nova.ui.component.WarningLevel
 import com.sukisu.nova.ui.component.HomeCardStickerOverlays
@@ -249,26 +250,36 @@ private fun UpdateCard(
         enter = fadeIn() + expandVertically(),
         exit = shrinkVertically() + fadeOut()
     ) {
-        WarningCard(
-            message = customText(
-                CustomTextKey.HOME_UPDATE_NEW_VERSION,
-                newVersion.versionName.ifBlank { newVersion.versionCode.toString() },
-            ),
-            level = WarningLevel.Notice,
-            onClick = {
-                if (state.ciUpdateBusy) return@WarningCard
-                if (newVersion.changelog.isEmpty()) {
-                    actions.onReleaseUpdateClick()
-                } else {
-                    updateDialog.showConfirm(
-                        title = title,
-                        content = newVersion.changelog,
-                        markdown = true,
-                        confirm = updateText
-                    )
+        Column(modifier = Modifier.fillMaxWidth()) {
+            WarningCard(
+                message = customText(
+                    CustomTextKey.HOME_UPDATE_NEW_VERSION,
+                    newVersion.versionName.ifBlank { newVersion.versionCode.toString() },
+                ),
+                level = WarningLevel.Notice,
+                onClick = {
+                    if (state.ciUpdateBusy) return@WarningCard
+                    if (newVersion.changelog.isEmpty()) {
+                        actions.onReleaseUpdateClick()
+                    } else {
+                        updateDialog.showConfirm(
+                            title = title,
+                            content = newVersion.changelog,
+                            markdown = true,
+                            confirm = updateText
+                        )
+                    }
                 }
+            )
+            val progress = state.updateDownloadProgress
+            if (progress != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                LinearProgressIndicator(
+                    progress = progress,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
-        )
+        }
     }
 }
 

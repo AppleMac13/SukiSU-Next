@@ -40,6 +40,8 @@ data class HomeUiState(
     val checkCiUpdateEnabled: Boolean = false,
     val ciLatestVersionInfo: LatestVersionInfo = LatestVersionInfo(),
     val ciUpdateBusy: Boolean = false,
+    // 0..1 while the update APK is downloading; null when no transfer is running.
+    val updateDownloadProgress: Float? = null,
     val showFullStatus: Boolean = true,
     val hideHomeWarnings: Boolean = false,
     // Root without a SukiSU kernel: pages are browsable but kernel features are unavailable.
