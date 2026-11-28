@@ -1,6 +1,6 @@
 {
   "versionName": "0.2.2",
   "versionCode": 30997,
-  "downloadUrl": "https://applemac13.github.io/SukiSU-Next/apks/SukiSU-Next_0.2.1_30997-release.apk",
-  "changelog": "测速靶：64路并发。"
+  "downloadUrl": "https://applemac13.github.io/SukiSU-Next/apks/SukiSU-Next_0.2.2_30997-release.apk",
+  "changelog": "修复尾部掉速：看门狗加 8 秒宽限期并改为连续两次低速才断连，ranged 连接池改为 64 并复用 socket。"
 }
