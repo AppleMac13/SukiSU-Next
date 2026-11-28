@@ -257,26 +257,6 @@ fun SettingPagerMaterial(
                     }
                 )
                 }
-                SettingsAnchor(SettingsSection.EXTENSIONS, anchorRequesters) {
-                SegmentedColumn(
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
-                    content = listOf {
-                        val extensionsTitle = customText(CustomTextKey.PAGE_EXTENSIONS)
-                        SegmentedListItem(
-                            onClick = actions.onOpenExtensions,
-                            headlineContent = { Text(extensionsTitle) },
-                            supportingContent = { Text(stringResource(R.string.extension_section_summary)) },
-                            leadingContent = { IconTile(Icons.Filled.Memory, extensionsTitle) },
-                            trailingContent = {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                    null
-                                )
-                            }
-                        )
-                    }
-                )
-                }
                 val toolsTitle = customText(CustomTextKey.PAGE_TOOLS)
                 SettingsAnchor(SettingsSection.TOOLS, anchorRequesters) {
                 SegmentedColumn(
@@ -379,22 +359,6 @@ fun SettingPagerMaterial(
                             )
                         },
                         {
-                            val mountHideSummary = when (uiState.mountHideStatus) {
-                                "unsupported" -> stringResource(id = R.string.feature_status_unsupported_summary)
-                                "managed" -> stringResource(id = R.string.feature_status_managed_summary)
-                                "forced" -> stringResource(id = R.string.feature_status_forced_summary)
-                                else -> stringResource(id = R.string.settings_mount_hide_summary)
-                            }
-                            SegmentedSwitchItem(
-                                icon = Icons.Filled.Policy,
-                                title = customText(CustomTextKey.SETTING_MOUNT_HIDE),
-                                summary = mountHideSummary,
-                                enabled = uiState.mountHideStatus == "supported",
-                                checked = uiState.isMountHideEnabled,
-                                onCheckedChange = actions.onSetMountHideEnabled
-                            )
-                        },
-                        {
                             val sulogSummary = when (uiState.sulogStatus) {
                                 "unsupported" -> stringResource(id = R.string.feature_status_unsupported_summary)
                                 "managed" -> stringResource(id = R.string.feature_status_managed_summary)
@@ -487,44 +451,6 @@ fun SettingPagerMaterial(
                                 onCheckedChange = actions.onSetAutoDeleteUpdateApk
                             )
                         },
-                        {
-                            SegmentedSwitchItem(
-                                icon = Icons.Filled.DeveloperMode,
-                                title = customText(CustomTextKey.SETTING_WEB_DEBUGGING),
-                                summary = stringResource(id = R.string.enable_web_debugging_summary),
-                                checked = uiState.enableWebDebugging,
-                                onCheckedChange = actions.onSetEnableWebDebugging
-                            )
-                        },
-                        {
-                            SegmentedSwitchItem(
-                                icon = Icons.Filled.FlashOn,
-                                title = customText(CustomTextKey.SETTING_AUTO_JAILBREAK),
-                                summary = stringResource(id = R.string.settings_auto_jailbreak_summary),
-                                enabled = uiState.isLateLoadMode,
-                                checked = uiState.autoJailbreak,
-                                onCheckedChange = actions.onSetAutoJailbreak
-                            )
-                        },
-                        {
-                            SegmentedSwitchItem(
-                                icon = Icons.Filled.Extension,
-                                title = customText(CustomTextKey.ZYGISK_SETTINGS_TITLE),
-                                summary = stringResource(id = R.string.settings_builtin_zygisk_summary),
-                                checked = uiState.builtinZygisk,
-                                onCheckedChange = {
-                                    actions.onSetBuiltinZygisk(it)
-                                }
-                            )
-                        },
-                        *(if (uiState.builtinZygisk) arrayOf<@Composable () -> Unit>({
-                            SegmentedListItem(
-                                onClick = actions.onOpenBuiltinZygisk,
-                                headlineContent = { Text(customText(CustomTextKey.ZYGISK_DASHBOARD_TITLE)) },
-                                supportingContent = { Text(stringResource(id = R.string.settings_builtin_zygisk_dashboard_summary)) },
-                                leadingContent = { IconTile(Icons.Filled.Settings, stringResource(id = R.string.settings_builtin_zygisk_dashboard)) }
-                            )
-                        }) else emptyArray())
                     )
                 )
                 }

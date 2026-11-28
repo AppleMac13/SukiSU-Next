@@ -303,28 +303,6 @@ fun SettingPagerMiuix(
                                 onClick = actions.onOpenProfileTemplate
                             )
                         }
-                        AppCard(
-                            modifier = Modifier
-                                .bringIntoViewRequester(requester(SettingsSection.EXTENSIONS))
-                                .padding(top = 12.dp)
-                                .fillMaxWidth(),
-                            colors = backgroundAwareCardColors(),
-                        ) {
-                            val extensionsTitle = customText(CustomTextKey.PAGE_EXTENSIONS)
-                            ArrowPreference(
-                                title = extensionsTitle,
-                                summary = stringResource(R.string.extension_section_summary),
-                                startAction = {
-                                    Icon(
-                                        Icons.Rounded.Memory,
-                                        modifier = Modifier.padding(end = 6.dp),
-                                        contentDescription = extensionsTitle,
-                                        tint = colorScheme.onBackground
-                                    )
-                                },
-                                onClick = actions.onOpenExtensions
-                            )
-                        }
                         val toolsTitle = customText(CustomTextKey.PAGE_TOOLS)
                         AppCard(
                             modifier = Modifier
@@ -461,28 +439,6 @@ fun SettingPagerMiuix(
                                 onCheckedChange = actions.onSetAvcSpoofEnabled
                             )
 
-                            val mountHideSummary = when (uiState.mountHideStatus) {
-                                "unsupported" -> stringResource(id = R.string.feature_status_unsupported_summary)
-                                "managed" -> stringResource(id = R.string.feature_status_managed_summary)
-                                "forced" -> stringResource(id = R.string.feature_status_forced_summary)
-                                else -> stringResource(id = R.string.settings_mount_hide_summary)
-                            }
-                            SwitchPreference(
-                                title = customText(CustomTextKey.SETTING_MOUNT_HIDE),
-                                summary = mountHideSummary,
-                                startAction = {
-                                    Icon(
-                                        Icons.Rounded.Policy,
-                                        modifier = Modifier.padding(end = 6.dp),
-                                        contentDescription = customText(CustomTextKey.SETTING_MOUNT_HIDE),
-                                        tint = colorScheme.onBackground
-                                    )
-                                },
-                                enabled = uiState.mountHideStatus == "supported",
-                                checked = uiState.isMountHideEnabled,
-                                onCheckedChange = actions.onSetMountHideEnabled
-                            )
-
                             val sulogSummary = when (uiState.sulogStatus) {
                                 "unsupported" -> stringResource(id = R.string.feature_status_unsupported_summary)
                                 "managed" -> stringResource(id = R.string.feature_status_managed_summary)
@@ -615,66 +571,6 @@ fun SettingPagerMiuix(
                                 checked = uiState.autoDeleteUpdateApk,
                                 onCheckedChange = actions.onSetAutoDeleteUpdateApk
                             )
-                            SwitchPreference(
-                                title = customText(CustomTextKey.SETTING_WEB_DEBUGGING),
-                                summary = stringResource(id = R.string.enable_web_debugging_summary),
-                                startAction = {
-                                    Icon(
-                                        Icons.Rounded.DeveloperMode,
-                                        modifier = Modifier.padding(end = 6.dp),
-                                        contentDescription = customText(CustomTextKey.SETTING_WEB_DEBUGGING),
-                                        tint = colorScheme.onBackground
-                                    )
-                                },
-                                checked = uiState.enableWebDebugging,
-                                onCheckedChange = actions.onSetEnableWebDebugging
-                            )
-                            SwitchPreference(
-                                title = customText(CustomTextKey.SETTING_AUTO_JAILBREAK),
-                                summary = stringResource(id = R.string.settings_auto_jailbreak_summary),
-                                startAction = {
-                                    Icon(
-                                        Icons.Rounded.FlashOn,
-                                        modifier = Modifier.padding(end = 6.dp),
-                                        contentDescription = customText(CustomTextKey.SETTING_AUTO_JAILBREAK),
-                                        tint = if (uiState.isLateLoadMode) colorScheme.onBackground else colorScheme.disabledOnSecondaryVariant
-                                    )
-                                },
-                                enabled = uiState.isLateLoadMode,
-                                checked = uiState.autoJailbreak,
-                                onCheckedChange = actions.onSetAutoJailbreak
-                            )
-                            SwitchPreference(
-                                title = customText(CustomTextKey.ZYGISK_SETTINGS_TITLE),
-                                summary = stringResource(id = R.string.settings_builtin_zygisk_summary),
-                                startAction = {
-                                    Icon(
-                                        Icons.Rounded.Extension,
-                                        modifier = Modifier.padding(end = 6.dp),
-                                        contentDescription = stringResource(id = R.string.settings_builtin_zygisk),
-                                        tint = colorScheme.onBackground
-                                    )
-                                },
-                                checked = uiState.builtinZygisk,
-                                onCheckedChange = {
-                                    actions.onSetBuiltinZygisk(it)
-                                }
-                            )
-                            if (uiState.builtinZygisk) {
-                                ArrowPreference(
-                                    title = customText(CustomTextKey.ZYGISK_DASHBOARD_TITLE),
-                                    summary = stringResource(id = R.string.settings_builtin_zygisk_dashboard_summary),
-                                    startAction = {
-                                        Icon(
-                                            Icons.Rounded.Settings,
-                                            modifier = Modifier.padding(end = 6.dp),
-                                            contentDescription = stringResource(id = R.string.settings_builtin_zygisk_dashboard),
-                                            tint = colorScheme.onBackground
-                                        )
-                                    },
-                                    onClick = actions.onOpenBuiltinZygisk
-                                )
-                            }
                         }
                     }
 

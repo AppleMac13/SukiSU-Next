@@ -78,11 +78,8 @@ fun rememberSusfsInfo(
             val supported = getSuSFSStatus().equals("true", ignoreCase = true)
             if (supported) {
                 val version = getSuSFSVersion().trim()
-                val hookLabel = when (val type = Natives.getHookType()) {
-                    "Manual" -> manualHookLabel
-                    "Inline" -> inlineHookLabel
-                    else -> type
-                }.takeIf { it.isNotBlank() }?.let { "($it)" }.orEmpty()
+                val hookLabel = Natives.getHookType().trim().takeIf { it.isNotBlank() }
+                    ?.let { "($it)" }.orEmpty()
                 SusfsInfoState(
                     status = SusfsStatus.Supported,
                     detail = listOf(version, hookLabel)
@@ -108,13 +105,9 @@ fun rememberHookTypeLabel(
     tracepointHookText: String,
     unknownHookText: String,
 ): String? {
-    return remember(manualHookText, inlineHookText, tracepointHookText, unknownHookText) {
+    return remember(unknownHookText) {
         if (!isManager) return@remember null
         val rawType = runCatching { Natives.getHookType() }.getOrNull() ?: return@remember null
-        when (rawType) {
-            "Manual" -> manualHookText
-            "Tracepoint" -> tracepointHookText
-            else -> rawType.ifBlank { unknownHookText }
-        }
+        rawType.trim().ifBlank { unknownHookText }
     }
 }
